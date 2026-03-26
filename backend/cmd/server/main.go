@@ -65,8 +65,14 @@ func main() {
 
 	queries := store.New(pool)
 
-	// Audio Broadcaster
-	broadcaster := audio.NewBroadcaster(cfg.IcecastURL, cfg.IcecastMount, cfg.IcecastSourcePassword)
+	// Audio Broadcaster (WebRTC)
+	broadcaster, err := audio.NewBroadcaster()
+	if err != nil {
+		log.Fatalf("failed to create broadcaster: %v", err)
+	}
+
+	// WebRTC Peer Manager
+	peerManager := audio.NewPeerManager(broadcaster.Track(), cfg.ICEServers)
 
 	// WebSocket Hub
 	hub := ws.NewHub(nil)
@@ -116,22 +122,18 @@ func main() {
 	go broadcaster.Run(ctx, func() (string, float64, error) {
 		path, err := playbackSvc.GetCurrentAudioPath(context.Background())
 		if err != nil || path == "" {
-			return "", 0, nil // no track playing — broadcaster will wait for Wake()
+			return "", 0, nil
 		}
-		// Check if we're resuming mid-track (server restart)
 		state, _ := playbackSvc.GetCurrentState(context.Background())
 		var offset float64
 		if state != nil {
 			offset = time.Since(state.StartedAt).Seconds()
 			if offset < 1 {
-				offset = 0 // just started, no need to seek
+				offset = 0
 			}
 		}
 		return path, offset, nil
 	}, func(skipped bool) {
-		// Always advance to the next track, whether the current one
-		// finished naturally or was skipped. SkipCurrent already marked
-		// the track as played; AdvanceQueue picks the next ready track.
 		playbackSvc.AdvanceQueue(context.Background())
 	})
 
@@ -139,10 +141,8 @@ func main() {
 	go func() {
 		state, _ := playbackSvc.GetCurrentState(context.Background())
 		if state != nil {
-			// Mid-track restart — wake the broadcaster to continue streaming
 			broadcaster.Wake()
 		} else {
-			// No track playing — try to advance to the next ready track
 			playbackSvc.AdvanceQueue(context.Background())
 		}
 	}()
@@ -151,12 +151,11 @@ func main() {
 	queueH := handler.NewQueueHandler(queries, playbackSvc, hub, cfg.YouTubeAPIKey, extractor)
 	playbackH := handler.NewPlaybackHandler(playbackSvc)
 	adminH := handler.NewAdminHandler(queries, playbackSvc, hub)
-	wsH := handler.NewWSHandler(hub)
+	wsH := handler.NewWSHandler(hub, peerManager)
 	historyH := handler.NewHistoryHandler(queries)
 	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath)
 	listenerH := handler.NewListenerHandler(hub)
 	meH := handler.NewMeHandler(queries)
-	streamH := handler.NewStreamHandler(cfg.IcecastURL + cfg.IcecastMount)
 
 	// Router
 	r := chi.NewRouter()
@@ -171,9 +170,6 @@ func main() {
 
 	// WebSocket (no auth middleware)
 	r.Get("/ws", wsH.HandleWS)
-
-	// Audio stream proxy (Icecast → browser)
-	r.Get("/stream", streamH.HandleStream)
 
 	// API routes with auth
 	r.Route("/api", func(r chi.Router) {
