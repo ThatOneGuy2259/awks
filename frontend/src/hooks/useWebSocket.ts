@@ -57,7 +57,13 @@ function connectWs(userId: string, username: string, avatarUrl: string) {
     }).catch(() => {});
     api.getSettings().then((settings) => {
       if (settings.skip_votes_required) {
-        useSkipVoteStore.getState().setVotesRequired(Number(settings.skip_votes_required));
+        useSkipVoteStore.getState().setFixedRequired(Number(settings.skip_votes_required));
+      }
+      if (settings.skip_mode) {
+        useSkipVoteStore.getState().setSkipMode(settings.skip_mode);
+      }
+      if (settings.skip_percent) {
+        useSkipVoteStore.getState().setSkipPercent(Number(settings.skip_percent));
       }
     }).catch(() => {});
     api.getListeners().then((data) => {
@@ -151,7 +157,6 @@ function handleMessage(msg: { type: string; data: unknown }) {
     case 'SKIP_VOTE_UPDATE': {
       const d = data as { queue_id: string; votes: number; votes_required: number };
       useSkipVoteStore.getState().setVotes(d.votes);
-      useSkipVoteStore.getState().setVotesRequired(d.votes_required);
       break;
     }
     case 'TRACK_SKIPPED':
@@ -162,8 +167,10 @@ function handleMessage(msg: { type: string; data: unknown }) {
       break;
     }
     case 'SETTINGS_UPDATE': {
-      const d = data as { skip_votes_required: number };
-      useSkipVoteStore.getState().setVotesRequired(d.skip_votes_required);
+      const d = data as { skip_votes_required: number; skip_mode: string; skip_percent: number };
+      useSkipVoteStore.getState().setFixedRequired(d.skip_votes_required);
+      if (d.skip_mode) useSkipVoteStore.getState().setSkipMode(d.skip_mode);
+      if (d.skip_percent) useSkipVoteStore.getState().setSkipPercent(d.skip_percent);
       break;
     }
     case 'CHAT_MESSAGE': {

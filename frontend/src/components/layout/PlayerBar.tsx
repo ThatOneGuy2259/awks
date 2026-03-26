@@ -11,7 +11,8 @@ interface PlayerBarProps {
 
 export function PlayerBar({ volume, onVolumeChange }: PlayerBarProps) {
   const track = usePlaybackStore((s) => s.currentTrack);
-  const { votes, votesRequired, votedByMe } = useSkipVoteStore();
+  const { votes, votedByMe, getVotesRequired } = useSkipVoteStore();
+  const votesRequired = getVotesRequired();
   const { elapsed, duration } = usePlaybackSync();
 
   if (!track) return null;
