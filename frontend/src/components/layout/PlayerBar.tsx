@@ -40,7 +40,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   };
 
   return (
-    <footer className="hidden lg:flex fixed bottom-0 left-64 right-0 h-24 bg-[#0e0e13]/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50 relative">
+    <footer className="hidden lg:flex fixed bottom-0 left-64 right-0 h-24 bg-[#0e0e13]/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50 overflow-hidden">
       {/* Left: Track info */}
       <div className="flex items-center gap-4 w-1/3 flex-shrink-0">
         <div className="w-12 h-12 rounded-lg overflow-hidden">

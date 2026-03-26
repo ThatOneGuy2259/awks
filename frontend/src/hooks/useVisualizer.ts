@@ -8,23 +8,29 @@ export function useVisualizer(
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const analyser = analyserRef.current;
-    if (!canvas || !analyser) return;
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+    let dataArray: Uint8Array | null = null;
 
     const draw = () => {
       animFrameRef.current = requestAnimationFrame(draw);
+
+      const analyser = analyserRef.current;
+      if (!analyser) return; // poll until analyser is available
+
+      if (!dataArray) {
+        dataArray = new Uint8Array(analyser.frequencyBinCount);
+      }
+
       analyser.getByteFrequencyData(dataArray);
 
       const { width, height } = canvas;
       ctx.clearRect(0, 0, width, height);
 
-      const barCount = bufferLength;
+      const barCount = dataArray.length;
       const gap = 2;
       const barWidth = (width - gap * (barCount - 1)) / barCount;
 
@@ -52,5 +58,5 @@ export function useVisualizer(
 
     draw();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [canvasRef, analyserRef, analyserRef.current]);
+  }, [canvasRef, analyserRef]);
 }
