@@ -1,0 +1,248 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strconv"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/mccann/awks3/backend/internal/audio"
+	"github.com/mccann/awks3/backend/internal/auth"
+	"github.com/mccann/awks3/backend/internal/model"
+	"github.com/mccann/awks3/backend/internal/service"
+	"github.com/mccann/awks3/backend/internal/store"
+	"github.com/mccann/awks3/backend/internal/ws"
+)
+
+type QueueHandler struct {
+	queries   store.Querier
+	playback  *service.PlaybackService
+	hub       *ws.Hub
+	apiKey    string
+	extractor *audio.Extractor
+}
+
+func NewQueueHandler(q store.Querier, p *service.PlaybackService, h *ws.Hub, apiKey string, ext *audio.Extractor) *QueueHandler {
+	return &QueueHandler{queries: q, playback: p, hub: h, apiKey: apiKey, extractor: ext}
+}
+
+func (h *QueueHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.queries.GetQueue(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	tracks := make([]model.QueueTrack, 0, len(rows))
+	for _, row := range rows {
+		tracks = append(tracks, model.QueueTrack{
+			ID:              row.ID.String(),
+			YouTubeURL:      row.YoutubeUrl,
+			VideoID:         row.VideoID,
+			Title:           row.Title,
+			Artist:          pgTextStr(row.Artist),
+			DurationSec:     int(row.DurationSec),
+			ThumbnailURL:    pgTextStr(row.ThumbnailUrl),
+			RequestedBy:     row.RequestedBy,
+			RequesterName:   row.RequesterName,
+			RequesterAvatar: pgTextStr(row.RequesterAvatar),
+			Position:        int(row.Position),
+			Status:          row.Status,
+			CreatedAt:       row.CreatedAt.Time,
+		})
+	}
+	writeJSON(w, tracks)
+}
+
+func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	username := auth.GetUsername(r.Context())
+	avatarURL := auth.GetAvatarURL(r.Context())
+	role := auth.GetRole(r.Context())
+	ctx := r.Context()
+
+	// Ensure user exists in shadow table before inserting queue item (FK constraint)
+	h.queries.UpsertUser(ctx, store.UpsertUserParams{
+		ID:        userID,
+		Username:  username,
+		AvatarUrl: pgtype.Text{String: avatarURL, Valid: avatarURL != ""},
+		Role:      role,
+	})
+
+	var body struct {
+		YouTubeURL string `json:"youtube_url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// Check timeout
+	timeout, err := h.queries.GetActiveTimeout(ctx, userID)
+	if err == nil && timeout.ID.Valid {
+		http.Error(w, "you are timed out from requesting songs", http.StatusForbidden)
+		return
+	}
+
+	// Check request limit
+	maxStr, _ := h.queries.GetSetting(ctx, "max_tracks_per_user")
+	maxTracks, _ := strconv.Atoi(maxStr)
+	if maxTracks > 0 {
+		count, _ := h.queries.CountUserPendingTracks(ctx, userID)
+		if count >= int64(maxTracks) {
+			http.Error(w, "request limit reached", http.StatusTooManyRequests)
+			return
+		}
+	}
+
+	videoID, err := service.ExtractVideoID(body.YouTubeURL)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	exists, _ := h.queries.IsVideoInQueue(ctx, videoID)
+	if exists {
+		http.Error(w, "song is already in the queue", http.StatusConflict)
+		return
+	}
+
+	meta, err := service.ResolveVideoMeta(videoID, h.apiKey)
+	if err != nil {
+		http.Error(w, "could not resolve video: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if meta.DurationSec > 600 {
+		http.Error(w, "video exceeds maximum duration of 10 minutes", http.StatusBadRequest)
+		return
+	}
+
+	item, err := h.queries.InsertQueueItem(ctx, store.InsertQueueItemParams{
+		YoutubeUrl:   body.YouTubeURL,
+		VideoID:      meta.VideoID,
+		Title:        meta.Title,
+		Artist:       pgtype.Text{String: meta.Artist, Valid: meta.Artist != ""},
+		DurationSec:  int32(meta.DurationSec),
+		ThumbnailUrl: pgtype.Text{String: meta.ThumbnailURL, Valid: meta.ThumbnailURL != ""},
+		RequestedBy:  userID,
+		AudioStatus:  "pending",
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Start audio extraction
+	h.extractor.Extract(item.ID, body.YouTubeURL)
+
+	h.broadcastQueueUpdate(ctx)
+
+	state, _ := h.playback.GetCurrentState(ctx)
+	if state == nil {
+		go h.playback.AdvanceQueue(context.Background())
+	}
+
+	writeJSON(w, item)
+}
+
+func (h *QueueHandler) DeleteFromQueue(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := parseUUID(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	item, err := h.queries.GetQueueItem(r.Context(), id)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	if item.Status == "playing" {
+		h.playback.SkipCurrent(r.Context(), "admin")
+	} else {
+		h.queries.DeleteQueueItem(r.Context(), id)
+		h.broadcastQueueUpdate(r.Context())
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *QueueHandler) CastSkipVote(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	ctx := r.Context()
+	idStr := chi.URLParam(r, "id")
+	id, err := parseUUID(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	h.queries.CastSkipVote(ctx, store.CastSkipVoteParams{QueueID: id, UserID: userID})
+	h.broadcastSkipVoteUpdate(ctx, id)
+
+	count, _ := h.queries.CountSkipVotes(ctx, id)
+	reqStr, _ := h.queries.GetSetting(ctx, "skip_votes_required")
+	required, _ := strconv.Atoi(reqStr)
+	if required > 0 && int(count) >= required {
+		h.playback.SkipCurrent(ctx, "vote")
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *QueueHandler) RetractSkipVote(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	ctx := r.Context()
+	idStr := chi.URLParam(r, "id")
+	id, err := parseUUID(idStr)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	h.queries.RetractSkipVote(ctx, store.RetractSkipVoteParams{QueueID: id, UserID: userID})
+	h.broadcastSkipVoteUpdate(ctx, id)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *QueueHandler) broadcastQueueUpdate(ctx context.Context) {
+	h.hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+}
+
+func (h *QueueHandler) broadcastSkipVoteUpdate(ctx context.Context, queueID pgtype.UUID) {
+	count, _ := h.queries.CountSkipVotes(ctx, queueID)
+	reqStr, _ := h.queries.GetSetting(ctx, "skip_votes_required")
+	required, _ := strconv.Atoi(reqStr)
+
+	h.hub.Broadcast(model.WSMessage{
+		Type: "SKIP_VOTE_UPDATE",
+		Data: model.SkipVoteUpdateData{
+			QueueID:       queueID.String(),
+			Votes:         int(count),
+			VotesRequired: required,
+		},
+	})
+}
+
+func pgTextStr(t pgtype.Text) string {
+	if t.Valid {
+		return t.String
+	}
+	return ""
+}
+
+func parseUUID(s string) (pgtype.UUID, error) {
+	var id pgtype.UUID
+	err := id.Scan(s)
+	return id, err
+}
+
+func writeJSON(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
