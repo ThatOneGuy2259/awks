@@ -51,14 +51,19 @@ func (h *AdminHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	skipReq, _ := h.queries.GetSetting(ctx, "skip_votes_required")
+	skipMode, _ := h.queries.GetSetting(ctx, "skip_mode")
+	skipPct, _ := h.queries.GetSetting(ctx, "skip_percent")
 	maxTracks, _ := h.queries.GetSetting(ctx, "max_tracks_per_user")
 	skipN, _ := strconv.Atoi(skipReq)
+	skipP, _ := strconv.Atoi(skipPct)
 	maxN, _ := strconv.Atoi(maxTracks)
 
 	h.hub.Broadcast(model.WSMessage{
 		Type: "SETTINGS_UPDATE",
 		Data: model.SettingsUpdateData{
 			SkipVotesRequired: skipN,
+			SkipMode:          skipMode,
+			SkipPercent:       skipP,
 			MaxTracksPerUser:  maxN,
 		},
 	})

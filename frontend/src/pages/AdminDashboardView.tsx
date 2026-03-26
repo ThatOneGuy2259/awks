@@ -11,6 +11,8 @@ export function AdminDashboardView() {
   const tracks = useQueueStore((s) => s.tracks);
   const { count: listenerCount, listeners } = useListenerStore();
   const [skipVotesRequired, setSkipVotesRequired] = useState(5);
+  const [skipMode, setSkipMode] = useState('fixed');
+  const [skipPercent, setSkipPercent] = useState(50);
   const [maxTracksPerUser, setMaxTracksPerUser] = useState(3);
   const [timeoutTarget, setTimeoutTarget] = useState<{ id: string; username: string } | null>(null);
 
@@ -20,16 +22,15 @@ export function AdminDashboardView() {
   useEffect(() => {
     api.getSettings().then((settings) => {
       if (settings.skip_votes_required) setSkipVotesRequired(Number(settings.skip_votes_required));
+      if (settings.skip_mode) setSkipMode(settings.skip_mode);
+      if (settings.skip_percent) setSkipPercent(Number(settings.skip_percent));
       if (settings.max_tracks_per_user) setMaxTracksPerUser(Number(settings.max_tracks_per_user));
     }).catch(() => {});
   }, []);
 
-  const handleSettingChange = (key: string, value: number, setter: (v: number) => void) => {
-    const prev = key === 'skip_votes_required' ? skipVotesRequired : maxTracksPerUser;
-    setter(value);
-    api.updateSettings({ [key]: String(value) }).catch((err) => {
+  const updateSetting = (key: string, value: string) => {
+    api.updateSettings({ [key]: value }).catch((err) => {
       console.error('settings update failed:', err);
-      setter(prev); // revert on failure
     });
   };
 
@@ -90,12 +91,16 @@ export function AdminDashboardView() {
             </h3>
             <div className="space-y-6">
               <SkipVotesRequiredControl
-                value={skipVotesRequired}
-                onChange={(v) => handleSettingChange('skip_votes_required', v, setSkipVotesRequired)}
+                mode={skipMode}
+                fixedValue={skipVotesRequired}
+                percentValue={skipPercent}
+                onModeChange={(m) => { setSkipMode(m); updateSetting('skip_mode', m); }}
+                onFixedChange={(v) => { setSkipVotesRequired(v); updateSetting('skip_votes_required', String(v)); }}
+                onPercentChange={(v) => { setSkipPercent(v); updateSetting('skip_percent', String(v)); }}
               />
               <MaxTracksPerUserControl
                 value={maxTracksPerUser}
-                onChange={(v) => handleSettingChange('max_tracks_per_user', v, setMaxTracksPerUser)}
+                onChange={(v) => { setMaxTracksPerUser(v); updateSetting('max_tracks_per_user', String(v)); }}
               />
             </div>
           </div>

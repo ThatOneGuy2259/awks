@@ -186,8 +186,7 @@ func (h *QueueHandler) CastSkipVote(w http.ResponseWriter, r *http.Request) {
 	h.broadcastSkipVoteUpdate(ctx, id)
 
 	count, _ := h.queries.CountSkipVotes(ctx, id)
-	reqStr, _ := h.queries.GetSetting(ctx, "skip_votes_required")
-	required, _ := strconv.Atoi(reqStr)
+	required := h.getSkipVotesRequired(ctx)
 	if required > 0 && int(count) >= required {
 		h.playback.SkipCurrent(ctx, "vote")
 	}
@@ -216,8 +215,7 @@ func (h *QueueHandler) broadcastQueueUpdate(ctx context.Context) {
 
 func (h *QueueHandler) broadcastSkipVoteUpdate(ctx context.Context, queueID pgtype.UUID) {
 	count, _ := h.queries.CountSkipVotes(ctx, queueID)
-	reqStr, _ := h.queries.GetSetting(ctx, "skip_votes_required")
-	required, _ := strconv.Atoi(reqStr)
+	required := h.getSkipVotesRequired(ctx)
 
 	h.hub.Broadcast(model.WSMessage{
 		Type: "SKIP_VOTE_UPDATE",
@@ -227,6 +225,36 @@ func (h *QueueHandler) broadcastSkipVoteUpdate(ctx context.Context, queueID pgty
 			VotesRequired: required,
 		},
 	})
+}
+
+// getSkipVotesRequired calculates the number of votes needed to skip.
+// In "fixed" mode, returns the configured number directly.
+// In "percent" mode, calculates ceil(listeners * percent / 100), minimum 1.
+func (h *QueueHandler) getSkipVotesRequired(ctx context.Context) int {
+	mode, _ := h.queries.GetSetting(ctx, "skip_mode")
+	if mode == "percent" {
+		pctStr, _ := h.queries.GetSetting(ctx, "skip_percent")
+		pct, _ := strconv.Atoi(pctStr)
+		if pct <= 0 {
+			pct = 50
+		}
+		listeners := h.hub.ListenerCount()
+		if listeners <= 0 {
+			return 1
+		}
+		required := (listeners*pct + 99) / 100 // ceil division
+		if required < 1 {
+			required = 1
+		}
+		return required
+	}
+	// fixed mode
+	reqStr, _ := h.queries.GetSetting(ctx, "skip_votes_required")
+	required, _ := strconv.Atoi(reqStr)
+	if required < 1 {
+		required = 1
+	}
+	return required
 }
 
 func pgTextStr(t pgtype.Text) string {

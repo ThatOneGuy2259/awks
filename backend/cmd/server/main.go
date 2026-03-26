@@ -55,6 +55,9 @@ func main() {
 	if _, err := pool.Exec(context.Background(), readMigration("003_audio_status.up.sql")); err != nil {
 		log.Printf("migration 003 warning: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), readMigration("004_skip_mode.up.sql")); err != nil {
+		log.Printf("migration 004 warning: %v", err)
+	}
 
 	// Redis
 	rdb, err := redisclient.New(cfg.RedisURL)

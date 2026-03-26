@@ -74,6 +74,8 @@ type ListenerUpdateData struct {
 }
 
 type SettingsUpdateData struct {
-	SkipVotesRequired int `json:"skip_votes_required"`
-	MaxTracksPerUser  int `json:"max_tracks_per_user"`
+	SkipVotesRequired int    `json:"skip_votes_required"`
+	SkipMode          string `json:"skip_mode"`
+	SkipPercent       int    `json:"skip_percent"`
+	MaxTracksPerUser  int    `json:"max_tracks_per_user"`
 }
