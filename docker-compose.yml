@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: awks
+      POSTGRES_PASSWORD: awks
+      POSTGRES_DB: awks
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  icecast:
+    image: moul/icecast
+    environment:
+      ICECAST_SOURCE_PASSWORD: awks_source
+      ICECAST_ADMIN_PASSWORD: awks_admin
+      ICECAST_PASSWORD: awks_listener
+      ICECAST_RELAY_PASSWORD: awks_relay
+      ICECAST_HOSTNAME: localhost
+    ports:
+      - "8001:8000"
+
+volumes:
+  pgdata:

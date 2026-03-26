@@ -7,14 +7,17 @@ import (
 )
 
 type Config struct {
-	Port           string
-	DatabaseURL    string
-	RedisURL       string
-	ClerkSecretKey string
-	YouTubeAPIKey  string
-	CORSOrigin     string
-	AudioCacheDir  string
-	YtdlpPath      string
+	Port                  string
+	DatabaseURL           string
+	RedisURL              string
+	ClerkSecretKey        string
+	YouTubeAPIKey         string
+	CORSOrigin            string
+	AudioCacheDir         string
+	YtdlpPath             string
+	IcecastURL            string
+	IcecastSourcePassword string
+	IcecastMount          string
 }
 
 func Load() *Config {
@@ -27,8 +30,11 @@ func Load() *Config {
 		ClerkSecretKey: getEnv("CLERK_SECRET_KEY", ""),
 		YouTubeAPIKey:  getEnv("YOUTUBE_API_KEY", ""),
 		CORSOrigin:     getEnv("CORS_ORIGIN", "http://localhost:5173"),
-		AudioCacheDir:  getEnv("AUDIO_CACHE_DIR", "./audio-cache"),
-		YtdlpPath:      getEnv("YTDLP_PATH", "yt-dlp"),
+		AudioCacheDir:         getEnv("AUDIO_CACHE_DIR", "./audio-cache"),
+		YtdlpPath:             getEnv("YTDLP_PATH", "yt-dlp"),
+		IcecastURL:            getEnv("ICECAST_URL", "http://localhost:8001"),
+		IcecastSourcePassword: getEnv("ICECAST_SOURCE_PASSWORD", "awks_source"),
+		IcecastMount:          getEnv("ICECAST_MOUNT", "/stream"),
 	}
 }
 
