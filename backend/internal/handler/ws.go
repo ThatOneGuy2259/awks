@@ -89,6 +89,27 @@ func (h *WSHandler) handleMessage(c *ws.Client, raw []byte) {
 			},
 		})
 
+	case "REACTION":
+		var data struct {
+			Emoji string `json:"emoji"`
+		}
+		if err := json.Unmarshal(msg.Data, &data); err != nil || data.Emoji == "" {
+			return
+		}
+		// Validate emoji is in allowed set
+		allowed := map[string]bool{"🔥": true, "❤️": true, "😂": true, "💀": true, "🗑️": true}
+		if !allowed[data.Emoji] {
+			return
+		}
+		h.hub.Broadcast(model.WSMessage{
+			Type: "REACTION",
+			Data: map[string]string{
+				"emoji":    data.Emoji,
+				"user_id":  c.UserID,
+				"username": c.Username,
+			},
+		})
+
 	case "WEBRTC_OFFER":
 		var data struct {
 			SDP string `json:"sdp"`
