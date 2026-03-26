@@ -2,11 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/model"
 	"github.com/mccann/awks3/backend/internal/ws"
 )
@@ -16,11 +18,12 @@ var upgrader = websocket.Upgrader{
 }
 
 type WSHandler struct {
-	hub *ws.Hub
+	hub         *ws.Hub
+	peerManager *audio.PeerManager
 }
 
-func NewWSHandler(hub *ws.Hub) *WSHandler {
-	return &WSHandler{hub: hub}
+func NewWSHandler(hub *ws.Hub, pm *audio.PeerManager) *WSHandler {
+	return &WSHandler{hub: hub, peerManager: pm}
 }
 
 func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
@@ -86,8 +89,37 @@ func (h *WSHandler) handleMessage(c *ws.Client, raw []byte) {
 			},
 		})
 
+	case "WEBRTC_OFFER":
+		var data struct {
+			SDP string `json:"sdp"`
+		}
+		if err := json.Unmarshal(msg.Data, &data); err != nil || data.SDP == "" {
+			return
+		}
+		clientID := fmt.Sprintf("%p", c)
+		sendToClient := func(msgType string, payload interface{}) {
+			h.hub.SendToClient(c, model.WSMessage{
+				Type: msgType,
+				Data: payload,
+			})
+		}
+		if err := h.peerManager.HandleOffer(clientID, data.SDP, sendToClient); err != nil {
+			log.Printf("[webrtc] offer error for %s: %v", c.UserID, err)
+		}
+
+	case "WEBRTC_ICE_CANDIDATE":
+		var data struct {
+			Candidate string `json:"candidate"`
+		}
+		if err := json.Unmarshal(msg.Data, &data); err != nil || data.Candidate == "" {
+			return
+		}
+		clientID := fmt.Sprintf("%p", c)
+		if err := h.peerManager.HandleICECandidate(clientID, data.Candidate); err != nil {
+			log.Printf("[webrtc] ICE candidate error for %s: %v", c.UserID, err)
+		}
+
 	case "TRACK_ENDED":
-		// Client reports track ended; the server-side timer handles advancement
 		log.Printf("client %s reported track ended", c.UserID)
 	}
 }

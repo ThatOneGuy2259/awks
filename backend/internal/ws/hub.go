@@ -93,6 +93,20 @@ func (h *Hub) BroadcastRaw(data []byte) {
 	h.broadcast <- data
 }
 
+// SendToClient sends a message to a specific client by pointer.
+func (h *Hub) SendToClient(c *Client, msg model.WSMessage) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("failed to marshal ws message: %v", err)
+		return
+	}
+	select {
+	case c.Send <- data:
+	default:
+		log.Printf("failed to send to client %s: buffer full", c.UserID)
+	}
+}
+
 func (h *Hub) GetListeners() []model.Listener {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
