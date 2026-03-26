@@ -66,7 +66,7 @@ func main() {
 	queries := store.New(pool)
 
 	// Audio Broadcaster
-	broadcaster := audio.NewBroadcaster()
+	broadcaster := audio.NewBroadcaster(cfg.IcecastURL, cfg.IcecastMount, cfg.IcecastSourcePassword)
 
 	// WebSocket Hub
 	hub := ws.NewHub(nil)
@@ -116,7 +116,7 @@ func main() {
 	go broadcaster.Run(ctx, func() (string, float64, error) {
 		path, err := playbackSvc.GetCurrentAudioPath(context.Background())
 		if err != nil || path == "" {
-			return "", 0, err
+			return "", 0, nil // no track playing — broadcaster will wait for Wake()
 		}
 		// Check if we're resuming mid-track (server restart)
 		state, _ := playbackSvc.GetCurrentState(context.Background())
@@ -129,18 +129,21 @@ func main() {
 		}
 		return path, offset, nil
 	}, func(skipped bool) {
-		if !skipped {
-			playbackSvc.AdvanceQueue(context.Background())
-		}
-		// If skipped, SkipCurrent already handled advancement
+		// Always advance to the next track, whether the current one
+		// finished naturally or was skipped. SkipCurrent already marked
+		// the track as played; AdvanceQueue picks the next ready track.
+		playbackSvc.AdvanceQueue(context.Background())
 	})
 
-	// Resume playback if server restarts mid-track
+	// Resume playback on startup
 	go func() {
 		state, _ := playbackSvc.GetCurrentState(context.Background())
 		if state != nil {
-			// Wake the broadcaster to stream the current track
+			// Mid-track restart — wake the broadcaster to continue streaming
 			broadcaster.Wake()
+		} else {
+			// No track playing — try to advance to the next ready track
+			playbackSvc.AdvanceQueue(context.Background())
 		}
 	}()
 
@@ -150,27 +153,22 @@ func main() {
 	adminH := handler.NewAdminHandler(queries, playbackSvc, hub)
 	wsH := handler.NewWSHandler(hub)
 	historyH := handler.NewHistoryHandler(queries)
-	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey)
+	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath)
 	listenerH := handler.NewListenerHandler(hub)
 	meH := handler.NewMeHandler(queries)
-	streamH := handler.NewStreamHandler(broadcaster)
-
 	// Router
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{cfg.CORSOrigin},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowOriginFunc: func(r *http.Request, origin string) bool { return true },
+		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:  []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}))
 
 	// WebSocket (no auth middleware)
 	r.Get("/ws", wsH.HandleWS)
-
-	// Audio stream (no auth — <audio> element can't send headers easily)
-	r.Get("/api/stream", streamH.HandleStream)
 
 	// API routes with auth
 	r.Route("/api", func(r chi.Router) {
