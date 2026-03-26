@@ -3,6 +3,8 @@ import { QueueList } from '../components/queue/QueueList';
 import { OnlineListeners } from '../components/social/OnlineListeners';
 import { LiveChat } from '../components/social/LiveChat';
 import { wsSend } from '../hooks/useWebSocket';
+import { ReactionBar } from '../components/social/ReactionBar';
+import { ReactionOverlay } from '../components/social/ReactionOverlay';
 
 export function MusicQueueView() {
   const track = usePlaybackStore((s) => s.currentTrack);
@@ -14,6 +16,7 @@ export function MusicQueueView() {
         {/* Now Playing (Editorial Style) */}
         {track && (
           <section className="relative group">
+            <ReactionOverlay />
             <div className="flex flex-col md:flex-row items-end md:items-center gap-8">
               <div className="relative flex-shrink-0">
                 <div className="w-48 h-48 md:w-64 md:h-64 rounded-xl overflow-hidden shadow-2xl shadow-primary/20 rotate-[-2deg] group-hover:rotate-0 transition-transform duration-500">
@@ -40,6 +43,7 @@ export function MusicQueueView() {
                   </h2>
                   <p className="text-xl md:text-2xl text-primary font-medium">{track.artist}</p>
                 </div>
+                <ReactionBar />
               </div>
             </div>
           </section>
