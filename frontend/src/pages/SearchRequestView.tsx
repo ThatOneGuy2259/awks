@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { SearchInput } from '../components/search/SearchInput';
 import { TrackCard } from '../components/search/TrackCard';
 import { api, type SearchResult } from '../lib/api';
+import { useQueueStore } from '../stores/queueStore';
+import { useUserStore } from '../stores/userStore';
 
 const trendingSuggestions = ['Phonk', 'Midnight Lo-fi', 'Cyberpunk 2077', 'Hyperpop', 'Synthwave', 'Chillhop'];
 
@@ -10,6 +12,16 @@ export function SearchRequestView() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+
+  const tracks = useQueueStore((s) => s.tracks);
+  const userId = useUserStore((s) => s.id);
+  const maxTracks = 3;
+
+  const myPendingCount = tracks.filter(
+    (t) => t.requested_by === userId && (t.status === 'pending' || t.status === 'playing')
+  ).length;
+  const slotsRemaining = Math.max(0, maxTracks - myPendingCount);
+  const atLimit = slotsRemaining === 0;
 
   const handleSearch = async (q?: string) => {
     const searchQuery = q || query;
@@ -32,6 +44,22 @@ export function SearchRequestView() {
       {/* Search Input */}
       <div className="max-w-4xl mx-auto mb-16">
         <SearchInput value={query} onChange={setQuery} onSubmit={() => handleSearch()} />
+
+        {/* Queue Slot Counter */}
+        <div className="mt-4 flex items-center gap-2">
+          <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+            atLimit
+              ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+              : slotsRemaining === 1
+                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                : 'bg-surface-container-high text-on-surface-variant border border-outline-variant/15'
+          }`}>
+            {myPendingCount}/{maxTracks} queue slots used
+          </span>
+          {atLimit && (
+            <span className="text-xs text-red-400">Wait for a track to finish before adding more</span>
+          )}
+        </div>
 
         {/* Trending Suggestions */}
         <div className="mt-8 flex flex-wrap gap-3 items-center">
@@ -77,7 +105,7 @@ export function SearchRequestView() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {results.map((result, i) => (
-              <TrackCard key={result.video_id} track={result} featured={i === 0} />
+              <TrackCard key={result.video_id} track={result} featured={i === 0} disabled={atLimit} />
             ))}
           </div>
         </div>

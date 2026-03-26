@@ -5,9 +5,10 @@ import { useState } from 'react';
 interface TrackCardProps {
   track: SearchResult;
   featured?: boolean;
+  disabled?: boolean;
 }
 
-export function TrackCard({ track, featured }: TrackCardProps) {
+export function TrackCard({ track, featured, disabled }: TrackCardProps) {
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
 
@@ -47,7 +48,7 @@ export function TrackCard({ track, featured }: TrackCardProps) {
           <div className="mt-6 flex gap-4">
             <button
               onClick={handleRequest}
-              disabled={requesting || requested}
+              disabled={requesting || requested || disabled}
               className="signature-gradient text-on-primary-fixed font-bold px-8 py-3 rounded-full flex items-center gap-2 active:scale-95 transition-transform disabled:opacity-50"
             >
               <span className="material-symbols-outlined">{requested ? 'check' : 'add'}</span>
@@ -76,7 +77,7 @@ export function TrackCard({ track, featured }: TrackCardProps) {
         </div>
         <button
           onClick={handleRequest}
-          disabled={requesting || requested}
+          disabled={requesting || requested || disabled}
           className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-highest text-secondary hover:bg-secondary hover:text-on-secondary-fixed transition-all disabled:opacity-50 flex-shrink-0 ml-2"
         >
           <span className="material-symbols-outlined">{requested ? 'check' : 'playlist_add'}</span>
