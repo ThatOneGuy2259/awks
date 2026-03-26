@@ -13,6 +13,19 @@ const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`;
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+type MessageCallback = (data: unknown) => void;
+const messageCallbacks: Map<string, MessageCallback> = new Map();
+
+/** Register a callback for a specific message type. Used by useWebRTC for signaling. */
+export function onWsMessage(type: string, callback: MessageCallback) {
+  messageCallbacks.set(type, callback);
+}
+
+/** Unregister a callback for a specific message type. */
+export function offWsMessage(type: string) {
+  messageCallbacks.delete(type);
+}
+
 function connectWs(userId: string, username: string, avatarUrl: string) {
   // Prevent duplicate connections
   if (ws && ws.readyState <= WebSocket.OPEN) return;
@@ -106,6 +119,13 @@ export function useWebSocket() {
 
 function handleMessage(msg: { type: string; data: unknown }) {
   const { type, data } = msg;
+
+  // Dispatch to registered callbacks first
+  const cb = messageCallbacks.get(type);
+  if (cb) {
+    cb(data);
+    return;
+  }
 
   switch (type) {
     case 'TRACK_CHANGE': {

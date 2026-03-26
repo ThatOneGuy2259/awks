@@ -10,7 +10,7 @@ import { SearchRequestView } from './pages/SearchRequestView';
 import { AdminDashboardView } from './pages/AdminDashboardView';
 import { HistoryView } from './pages/HistoryView';
 import { useWebSocket } from './hooks/useWebSocket';
-import { useAudioStream } from './hooks/useAudioStream';
+import { useWebRTC } from './hooks/useWebRTC';
 import { setGetTokenFn, api } from './lib/api';
 import { useUserStore } from './stores/userStore';
 
@@ -43,7 +43,7 @@ function AuthenticatedApp() {
 
 function AppContent() {
   useWebSocket();
-  const { volume, setVolume, listening } = useAudioStream();
+  const { volume, setVolume, listening } = useWebRTC();
 
   return (
     <>
