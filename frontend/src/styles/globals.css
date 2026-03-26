@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0e0e13;
+  --color-surface: #0e0e13;
+  --color-surface-dim: #0e0e13;
+  --color-surface-bright: #2c2b33;
+  --color-surface-container-lowest: #000000;
+  --color-surface-container-low: #131319;
+  --color-surface-container: #19191f;
+  --color-surface-container-high: #1f1f26;
+  --color-surface-container-highest: #25252d;
+  --color-surface-variant: #25252d;
+  --color-on-surface: #f9f5fd;
+  --color-on-surface-variant: #acaab1;
+  --color-on-background: #f9f5fd;
+  --color-primary: #cf96ff;
+  --color-primary-dim: #a533ff;
+  --color-primary-container: #c683ff;
+  --color-primary-fixed: #c683ff;
+  --color-primary-fixed-dim: #bc6fff;
+  --color-on-primary: #480079;
+  --color-on-primary-fixed: #000000;
+  --color-on-primary-container: #37005f;
+  --color-on-primary-fixed-variant: #450074;
+  --color-inverse-primary: #8d00e6;
+  --color-secondary: #00f4fe;
+  --color-secondary-dim: #00e5ee;
+  --color-secondary-fixed: #00f4fe;
+  --color-secondary-fixed-dim: #00e5ee;
+  --color-secondary-container: #00696e;
+  --color-on-secondary: #00575b;
+  --color-on-secondary-fixed: #004346;
+  --color-on-secondary-fixed-variant: #006266;
+  --color-on-secondary-container: #dffdff;
+  --color-tertiary: #ff6b9b;
+  --color-tertiary-dim: #e30071;
+  --color-tertiary-fixed: #ff8eae;
+  --color-tertiary-fixed-dim: #ff75a0;
+  --color-tertiary-container: #ff067f;
+  --color-on-tertiary: #47001f;
+  --color-on-tertiary-fixed: #380017;
+  --color-on-tertiary-fixed-variant: #760037;
+  --color-on-tertiary-container: #000000;
+  --color-error: #ff6e84;
+  --color-error-dim: #d73357;
+  --color-error-container: #a70138;
+  --color-on-error: #490013;
+  --color-on-error-container: #ffb2b9;
+  --color-outline: #76747b;
+  --color-outline-variant: #48474d;
+  --color-surface-tint: #cf96ff;
+  --color-inverse-surface: #fcf8ff;
+  --color-inverse-on-surface: #55545b;
+
+  --font-headline: "Plus Jakarta Sans", sans-serif;
+  --font-body: "Manrope", sans-serif;
+  --font-label: "Manrope", sans-serif;
+
+  --radius-DEFAULT: 1rem;
+  --radius-lg: 2rem;
+  --radius-xl: 3rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-body antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  ::selection {
+    @apply bg-primary/30;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0e0e13;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #48474d;
+    border-radius: 10px;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    background: rgba(31, 31, 38, 0.6);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  .glass-panel {
+    background: rgba(37, 37, 45, 0.6);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+  }
+
+  .signature-gradient {
+    background: linear-gradient(135deg, #cf96ff 0%, #c683ff 100%);
+  }
+
+  .neon-glow-primary {
+    box-shadow: 0 0 20px rgba(207, 150, 255, 0.2);
+  }
+
+  .neon-glow-secondary {
+    box-shadow: 0 0 20px rgba(0, 244, 254, 0.2);
+  }
+}
+
+.material-symbols-outlined {
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}

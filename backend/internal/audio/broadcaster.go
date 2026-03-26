@@ -1,24 +1,29 @@
 package audio
 
 import (
+	"bufio"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
-	"net/http"
+	"net"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
 // Broadcaster reads audio files at real-time pace and pipes OGG pages
-// into an Icecast server as a source client via HTTP PUT.
+// into an Icecast server as a source client via raw HTTP PUT.
 type Broadcaster struct {
 	icecastURL string
 	mount      string
 	password   string
-	writer     io.Writer    // the PUT request body writer
-	skipCh     chan struct{} // signal to stop current track
-	wakeCh     chan struct{} // signal that a new track is available
+	conn       net.Conn     // raw TCP connection to Icecast
+	writer     *bufio.Writer // buffered writer on top of conn
+	skipCh     chan struct{}
+	wakeCh     chan struct{}
 }
 
 func NewBroadcaster(icecastURL, mount, sourcePassword string) *Broadcaster {
@@ -47,63 +52,111 @@ func (b *Broadcaster) Wake() {
 	}
 }
 
-// connect opens a persistent HTTP PUT connection to Icecast as a source client.
-// Returns a pipe writer that the caller writes OGG data into.
-func (b *Broadcaster) connect(ctx context.Context) (io.WriteCloser, error) {
-	pr, pw := io.Pipe()
-
-	url := fmt.Sprintf("%s%s", b.icecastURL, b.mount)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, pr)
+// connect opens a raw TCP connection to Icecast and sends the HTTP PUT
+// source request headers. Returns an error if the connection fails or
+// Icecast rejects the source.
+func (b *Broadcaster) connect() error {
+	parsed, err := url.Parse(b.icecastURL)
 	if err != nil {
-		pr.Close()
-		pw.Close()
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("invalid icecast URL: %w", err)
 	}
 
-	req.SetBasicAuth("source", b.password)
-	req.Header.Set("Content-Type", "application/ogg")
-	req.Header.Set("Ice-Name", "AWKS Radio")
-	req.Header.Set("Ice-Description", "Fill the Awkward Silence")
-	req.Header.Set("Ice-Genre", "Various")
-	req.Header.Set("Ice-Public", "0")
+	host := parsed.Host
+	if !strings.Contains(host, ":") {
+		host += ":8000"
+	}
 
-	// Fire the request in a goroutine — it blocks until the pipe is closed
-	go func() {
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			log.Printf("[broadcaster] icecast connection error: %v", err)
-			pr.Close()
-			return
+	conn, err := net.DialTimeout("tcp", host, 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("failed to connect to icecast at %s: %w", host, err)
+	}
+
+	// Send HTTP PUT request headers manually
+	auth := base64.StdEncoding.EncodeToString([]byte("source:" + b.password))
+	reqHeaders := fmt.Sprintf(
+		"PUT %s HTTP/1.0\r\n"+
+			"Authorization: Basic %s\r\n"+
+			"Content-Type: application/ogg\r\n"+
+			"Ice-Name: AWKS Radio\r\n"+
+			"Ice-Description: Fill the Awkward Silence\r\n"+
+			"Ice-Genre: Various\r\n"+
+			"Ice-Public: 0\r\n"+
+			"\r\n",
+		b.mount, auth,
+	)
+
+	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := conn.Write([]byte(reqHeaders)); err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to send headers to icecast: %w", err)
+	}
+
+	// Read the response status line
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to read icecast response: %w", err)
+	}
+
+	if !strings.Contains(statusLine, "200") {
+		conn.Close()
+		return fmt.Errorf("icecast rejected source: %s", strings.TrimSpace(statusLine))
+	}
+
+	// Drain remaining response headers
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil || strings.TrimSpace(line) == "" {
+			break
 		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			log.Printf("[broadcaster] icecast rejected source: %d %s", resp.StatusCode, string(body))
-		}
-		pr.Close()
-	}()
+	}
 
-	// Give Icecast a moment to accept the connection
-	time.Sleep(200 * time.Millisecond)
+	// Clear deadlines for streaming
+	conn.SetWriteDeadline(time.Time{})
+	conn.SetReadDeadline(time.Time{})
 
-	return pw, nil
+	b.conn = conn
+	b.writer = bufio.NewWriterSize(conn, 16384)
+
+	return nil
+}
+
+func (b *Broadcaster) disconnect() {
+	if b.writer != nil {
+		b.writer.Flush()
+		b.writer = nil
+	}
+	if b.conn != nil {
+		b.conn.Close()
+		b.conn = nil
+	}
+}
+
+// write writes data to the Icecast connection. Returns false if the write failed.
+func (b *Broadcaster) write(data []byte) bool {
+	if b.writer == nil {
+		return false
+	}
+	_, err := b.writer.Write(data)
+	if err != nil {
+		log.Printf("[broadcaster] icecast write error: %v", err)
+		b.disconnect()
+		return false
+	}
+	// Flush periodically to ensure data gets to Icecast
+	if err := b.writer.Flush(); err != nil {
+		log.Printf("[broadcaster] icecast flush error: %v", err)
+		b.disconnect()
+		return false
+	}
+	return true
 }
 
 // Run is the main broadcaster loop.
 func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, float64, error), onTrackDone func(skipped bool)) {
 	for {
-		// Ensure we have an Icecast connection
-		if b.writer == nil {
-			pw, err := b.connect(ctx)
-			if err != nil {
-				log.Printf("[broadcaster] failed to connect to icecast: %v", err)
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			b.writer = pw
-			log.Println("[broadcaster] connected to icecast")
-		}
-
 		audioPath, startOffset, err := getNextTrack()
 		if err != nil {
 			log.Printf("[broadcaster] error getting next track: %v", err)
@@ -112,15 +165,24 @@ func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, floa
 		}
 
 		if audioPath == "" {
+			// No track — disconnect from Icecast (avoid idle timeout) and wait
+			b.disconnect()
 			select {
 			case <-ctx.Done():
-				if closer, ok := b.writer.(io.Closer); ok {
-					closer.Close()
-				}
 				return
 			case <-b.wakeCh:
 				continue
 			}
+		}
+
+		// Connect to Icecast right before streaming (fresh connection per track)
+		if b.conn == nil {
+			if err := b.connect(); err != nil {
+				log.Printf("[broadcaster] %v, retrying in 2s...", err)
+				time.Sleep(2 * time.Second)
+				continue
+			}
+			log.Println("[broadcaster] connected to icecast")
 		}
 
 		skipped := b.streamFile(ctx, audioPath, startOffset)
@@ -128,26 +190,10 @@ func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, floa
 	}
 }
 
-// write writes data to the Icecast connection. Returns false if the write failed
-// (connection lost), signaling the caller to reconnect.
-func (b *Broadcaster) write(data []byte) bool {
-	if b.writer == nil {
-		return false
-	}
-	_, err := b.writer.Write(data)
-	if err != nil {
-		log.Printf("[broadcaster] icecast write error: %v", err)
-		if closer, ok := b.writer.(io.Closer); ok {
-			closer.Close()
-		}
-		b.writer = nil
-		return false
-	}
-	return true
-}
-
 // streamFile reads an OGG file and writes it to Icecast at real-time pace.
 func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSec float64) bool {
+	log.Printf("[broadcaster] streaming %s (offset=%.1fs)", path, startOffsetSec)
+
 	f, err := os.Open(path)
 	if err != nil {
 		log.Printf("[broadcaster] failed to open %s: %v", path, err)
@@ -158,7 +204,6 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 	reader := NewOggReader(f)
 
 	// Read and send the Opus header pages (ID header + comment header).
-	// These must be sent at the start of each track so decoders can resync.
 	for i := 0; i < 2; i++ {
 		page, err := reader.ReadPage()
 		if err != nil {
@@ -166,9 +211,11 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 			return false
 		}
 		if !b.write(page.Data) {
+			log.Printf("[broadcaster] failed to write header page %d to icecast", i)
 			return false
 		}
 	}
+	log.Printf("[broadcaster] sent OGG headers to icecast")
 
 	var lastGranule int64
 

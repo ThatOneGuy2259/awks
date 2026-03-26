@@ -156,6 +156,8 @@ func main() {
 	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath)
 	listenerH := handler.NewListenerHandler(hub)
 	meH := handler.NewMeHandler(queries)
+	streamH := handler.NewStreamHandler(cfg.IcecastURL + cfg.IcecastMount)
+
 	// Router
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)
@@ -169,6 +171,9 @@ func main() {
 
 	// WebSocket (no auth middleware)
 	r.Get("/ws", wsH.HandleWS)
+
+	// Audio stream proxy (Icecast → browser)
+	r.Get("/stream", streamH.HandleStream)
 
 	// API routes with auth
 	r.Route("/api", func(r chi.Router) {

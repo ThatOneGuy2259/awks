@@ -38,6 +38,7 @@ type Querier interface {
 	MoveToTop(ctx context.Context, id pgtype.UUID) error
 	RetractSkipVote(ctx context.Context, arg RetractSkipVoteParams) error
 	UpdateAudioStatus(ctx context.Context, arg UpdateAudioStatusParams) error
+	UpdateDuration(ctx context.Context, arg UpdateDurationParams) error
 	UpdateQueueStatus(ctx context.Context, arg UpdateQueueStatusParams) error
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 	UpsertUser(ctx context.Context, arg UpsertUserParams) (User, error)

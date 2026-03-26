@@ -71,15 +71,23 @@ func ClerkMiddleware(clerkSecretKey string) func(http.Handler) http.Handler {
 				}
 			}
 
-			// Build username and avatar
+			// Build display name as "First L." format
 			username := ""
-			if clerkUser.Username != nil {
+			firstName := ""
+			lastName := ""
+			if clerkUser.FirstName != nil {
+				firstName = *clerkUser.FirstName
+			}
+			if clerkUser.LastName != nil {
+				lastName = *clerkUser.LastName
+			}
+			if firstName != "" && lastName != "" {
+				username = string([]rune(firstName)[0]) + ". " + lastName
+			} else if firstName != "" {
+				username = firstName
+			} else if clerkUser.Username != nil && *clerkUser.Username != "" {
 				username = *clerkUser.Username
-			}
-			if username == "" && clerkUser.FirstName != nil {
-				username = *clerkUser.FirstName
-			}
-			if username == "" {
+			} else {
 				username = userID[:8]
 			}
 

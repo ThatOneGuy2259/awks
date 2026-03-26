@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/clerk-react';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useQueueStore } from '../stores/queueStore';
@@ -9,83 +9,99 @@ import { api } from '../lib/api';
 
 const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`;
 
+// Module-level singleton — only one connection ever exists
+let ws: WebSocket | null = null;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+function connectWs(userId: string, username: string, avatarUrl: string) {
+  // Prevent duplicate connections
+  if (ws && ws.readyState <= WebSocket.OPEN) return;
+
+  const params = new URLSearchParams({
+    user_id: userId,
+    username,
+    avatar_url: avatarUrl,
+  });
+  const socket = new WebSocket(`${WS_URL}?${params.toString()}`);
+  ws = socket;
+
+  socket.onopen = () => {
+    console.log('[WS] connected');
+    api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
+    api.getPlayback().then((state) => {
+      if (state && state.video_id) {
+        usePlaybackStore.getState().setTrack({
+          queueId: state.queue_id,
+          videoId: state.video_id,
+          title: state.title,
+          artist: state.artist,
+          thumbnail: state.thumbnail_url,
+          requestedBy: state.requested_by,
+          startedAt: state.started_at,
+          durationSec: state.duration_sec,
+        });
+      }
+    }).catch(() => {});
+    api.getSettings().then((settings) => {
+      if (settings.skip_votes_required) {
+        useSkipVoteStore.getState().setVotesRequired(Number(settings.skip_votes_required));
+      }
+    }).catch(() => {});
+    api.getListeners().then((data) => {
+      useListenerStore.getState().setListeners(data.count, data.listeners);
+    }).catch(() => {});
+  };
+
+  socket.onmessage = (event) => {
+    try {
+      handleMessage(JSON.parse(event.data));
+    } catch {}
+  };
+
+  socket.onclose = () => {
+    console.log('[WS] disconnected, reconnecting...');
+    ws = null;
+    reconnectTimer = setTimeout(() => connectWs(userId, username, avatarUrl), 2000);
+  };
+
+  socket.onerror = () => socket.close();
+}
+
+/** Send a message over the WebSocket. Can be called from anywhere. */
+export function wsSend(type: string, data: unknown) {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type, data }));
+  }
+}
+
+/**
+ * Call this ONCE at the app root to establish the WebSocket connection.
+ * Do NOT call from child components — use wsSend() directly instead.
+ */
 export function useWebSocket() {
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
   const { userId } = useAuth();
   const { user } = useUser();
 
-  const username = user?.username || user?.firstName || userId?.slice(0, 8) || 'anon';
+  const firstName = user?.firstName || '';
+  const lastName = user?.lastName || '';
+  const username = firstName && lastName
+    ? `${firstName.charAt(0)}. ${lastName}`
+    : firstName || user?.username || userId?.slice(0, 8) || 'anon';
   const avatarUrl = user?.imageUrl || '';
-
-  const connect = useCallback(() => {
-    const params = new URLSearchParams({
-      user_id: userId || '',
-      username,
-      avatar_url: avatarUrl,
-    });
-    const ws = new WebSocket(`${WS_URL}?${params.toString()}`);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      console.log('[WS] connected');
-      // Fetch initial state
-      api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
-      api.getPlayback().then((state) => {
-        if (state && state.video_id) {
-          usePlaybackStore.getState().setTrack({
-            queueId: state.queue_id,
-            videoId: state.video_id,
-            title: state.title,
-            artist: state.artist,
-            thumbnail: state.thumbnail_url,
-            requestedBy: state.requested_by,
-            startedAt: state.started_at,
-            durationSec: state.duration_sec,
-          });
-        }
-      }).catch(() => {});
-      api.getSettings().then((settings) => {
-        if (settings.skip_votes_required) {
-          useSkipVoteStore.getState().setVotesRequired(Number(settings.skip_votes_required));
-        }
-      }).catch(() => {});
-      api.getListeners().then((data) => {
-        useListenerStore.getState().setListeners(data.count, data.listeners);
-      }).catch(() => {});
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        handleMessage(msg);
-      } catch {}
-    };
-
-    ws.onclose = () => {
-      console.log('[WS] disconnected, reconnecting...');
-      reconnectTimer.current = setTimeout(connect, 2000);
-    };
-
-    ws.onerror = () => ws.close();
-  }, [userId, username, avatarUrl]);
 
   useEffect(() => {
     if (!userId) return;
-    connect();
+    connectWs(userId, username, avatarUrl);
+
     return () => {
-      clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      ws?.close();
+      ws = null;
     };
-  }, [connect, userId]);
-
-  const sendMessage = useCallback((type: string, data: unknown) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type, data }));
-    }
-  }, []);
-
-  return { sendMessage };
+  }, [userId, username, avatarUrl]);
 }
 
 function handleMessage(msg: { type: string; data: unknown }) {
@@ -112,28 +128,22 @@ function handleMessage(msg: { type: string; data: unknown }) {
         });
       }
       useSkipVoteStore.getState().reset();
-      // Refetch queue
       api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
       break;
     }
-    case 'SYNC': {
-      // SYNC messages are still received for future use but audio
-      // playback is now server-driven via the stream endpoint.
+    case 'SYNC':
       break;
-    }
-    case 'QUEUE_UPDATE': {
+    case 'QUEUE_UPDATE':
       api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
       break;
-    }
     case 'SKIP_VOTE_UPDATE': {
       const d = data as { queue_id: string; votes: number; votes_required: number };
       useSkipVoteStore.getState().setVotes(d.votes);
       useSkipVoteStore.getState().setVotesRequired(d.votes_required);
       break;
     }
-    case 'TRACK_SKIPPED': {
+    case 'TRACK_SKIPPED':
       break;
-    }
     case 'LISTENER_UPDATE': {
       const d = data as { count: number; listeners: Array<{ id: string; username: string; avatar_url: string }> };
       useListenerStore.getState().setListeners(d.count, d.listeners);

@@ -1,31 +1,16 @@
-import { useEffect } from 'react';
-
 interface AudioStreamProps {
-  audioRef: React.RefObject<HTMLAudioElement | null>;
-  streamUrl: string;
-  onReconnect: () => void;
+  listening: boolean;
 }
 
-export function AudioStream({ audioRef, streamUrl, onReconnect }: AudioStreamProps) {
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    const handleError = () => {
-      console.log('[audio] stream error, reconnecting in 2s...');
-      setTimeout(onReconnect, 2000);
-    };
-
-    audio.addEventListener('error', handleError);
-    return () => audio.removeEventListener('error', handleError);
-  }, [audioRef, onReconnect]);
+export function AudioStream({ listening }: AudioStreamProps) {
+  if (listening) return null;
 
   return (
-    <audio
-      ref={audioRef}
-      src={streamUrl}
-      autoPlay
-      style={{ display: 'none' }}
-    />
+    <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50">
+      <div className="flex items-center gap-2 px-6 py-3 rounded-full bg-surface-container-high text-on-surface-variant text-sm border border-outline-variant/20">
+        <span className="material-symbols-outlined text-base animate-pulse">hearing</span>
+        Click anywhere to start listening
+      </div>
+    </div>
   );
 }

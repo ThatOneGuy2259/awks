@@ -387,6 +387,20 @@ func (q *Queries) UpdateAudioStatus(ctx context.Context, arg UpdateAudioStatusPa
 	return err
 }
 
+const updateDuration = `-- name: UpdateDuration :exec
+UPDATE queue SET duration_sec = $2 WHERE queue.id = $1
+`
+
+type UpdateDurationParams struct {
+	ID          pgtype.UUID `json:"id"`
+	DurationSec int32       `json:"duration_sec"`
+}
+
+func (q *Queries) UpdateDuration(ctx context.Context, arg UpdateDurationParams) error {
+	_, err := q.db.Exec(ctx, updateDuration, arg.ID, arg.DurationSec)
+	return err
+}
+
 const updateQueueStatus = `-- name: UpdateQueueStatus :exec
 UPDATE queue SET status = $2 WHERE queue.id = $1
 `

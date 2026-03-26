@@ -5,8 +5,6 @@ import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { BottomNav } from './components/layout/BottomNav';
 import { PlayerBar } from './components/layout/PlayerBar';
-import { AudioStream } from './components/player/AudioStream';
-import { MainListenerView } from './pages/MainListenerView';
 import { MusicQueueView } from './pages/MusicQueueView';
 import { SearchRequestView } from './pages/SearchRequestView';
 import { AdminDashboardView } from './pages/AdminDashboardView';
@@ -45,18 +43,16 @@ function AuthenticatedApp() {
 
 function AppContent() {
   useWebSocket();
-  const { audioRef, volume, setVolume, reconnect, streamUrl } = useAudioStream();
+  const { volume, setVolume, listening } = useAudioStream();
 
   return (
     <>
-      <AudioStream audioRef={audioRef} streamUrl={streamUrl} onReconnect={reconnect} />
       <TopBar />
-      <Sidebar />
+      <Sidebar listening={listening} />
 
       <main className="lg:pl-64 pt-20 pb-32 min-h-screen">
         <Routes>
-          <Route path="/" element={<MainListenerView />} />
-          <Route path="/queue" element={<MusicQueueView />} />
+          <Route path="/" element={<MusicQueueView />} />
           <Route path="/search" element={<SearchRequestView />} />
           <Route path="/history" element={<HistoryView />} />
           <Route path="/admin" element={<AdminRoute />} />

@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -85,6 +88,19 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 		}
 
 		log.Printf("[extractor] extracted audio for %s -> %s", idStr, outputPath)
+
+		// Get real duration from yt-dlp
+		durCmd := exec.Command(e.ytdlpPath, "--print", "duration", "--no-warnings", youtubeURL)
+		if durOut, durErr := durCmd.Output(); durErr == nil {
+			if secs, parseErr := strconv.ParseFloat(strings.TrimSpace(string(durOut)), 64); parseErr == nil && secs > 0 {
+				e.queries.UpdateDuration(context.Background(), store.UpdateDurationParams{
+					ID:          queueID,
+					DurationSec: int32(math.Round(secs)),
+				})
+				log.Printf("[extractor] updated duration for %s: %.0fs", idStr, secs)
+			}
+		}
+
 		e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 			ID:          queueID,
 			AudioStatus: "ready",
