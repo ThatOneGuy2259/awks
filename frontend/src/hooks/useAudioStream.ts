@@ -1,6 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 
-const STREAM_URL = (import.meta.env.VITE_API_URL || '') + '/api/stream';
+const STREAM_URL = import.meta.env.VITE_ICECAST_URL || `http://${window.location.hostname}:8001/stream`;
 
 export function useAudioStream() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -8,12 +8,43 @@ export function useAudioStream() {
     const saved = localStorage.getItem('awks-volume');
     return saved ? parseInt(saved) : 70;
   });
+  const [listening, setListening] = useState(false);
 
+  // Auto-start the stream on mount
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
+    const audio = new Audio(STREAM_URL + '?t=' + Date.now());
     audio.volume = volume / 100;
-  }, [volume]);
+    audioRef.current = audio;
+
+    audio.play().then(() => {
+      setListening(true);
+    }).catch(() => {
+      // Autoplay blocked — wait for any user interaction then retry
+      const tryPlay = () => {
+        audio.src = STREAM_URL + '?t=' + Date.now();
+        audio.play().then(() => {
+          setListening(true);
+          document.removeEventListener('click', tryPlay);
+          document.removeEventListener('keydown', tryPlay);
+        }).catch(() => {});
+      };
+      document.addEventListener('click', tryPlay);
+      document.addEventListener('keydown', tryPlay);
+    });
+
+    audio.onerror = () => {
+      console.log('[audio] stream error, reconnecting in 3s...');
+      setTimeout(() => {
+        audio.src = STREAM_URL + '?t=' + Date.now();
+        audio.play().catch(() => {});
+      }, 3000);
+    };
+
+    return () => {
+      audio.pause();
+      audio.src = '';
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setVolume = useCallback((vol: number) => {
     setVolumeState(vol);
@@ -23,14 +54,5 @@ export function useAudioStream() {
     }
   }, []);
 
-  const reconnect = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    audio.src = '';
-    audio.src = STREAM_URL;
-    audio.load();
-    audio.play().catch(() => {});
-  }, []);
-
-  return { audioRef, volume, setVolume, reconnect, streamUrl: STREAM_URL };
+  return { volume, setVolume, listening };
 }
