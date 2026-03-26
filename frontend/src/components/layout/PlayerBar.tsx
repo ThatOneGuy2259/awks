@@ -90,8 +90,8 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
       <canvas
         ref={canvasRef}
         width={1200}
-        height={180}
-        className="absolute -top-[180px] left-0 right-0 h-[180px] w-full pointer-events-none"
+        height={280}
+        className="absolute -top-[180px] left-0 right-0 h-[280px] w-full pointer-events-none"
       />
     </footer>
   );

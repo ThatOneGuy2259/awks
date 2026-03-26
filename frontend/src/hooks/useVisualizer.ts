@@ -19,34 +19,36 @@ export function useVisualizer(
     let dataArray: Uint8Array | null = null;
 
     const barCount = 128;
-
-    // Pre-compute logarithmic bin mapping
-    // Maps each visual bar to a range of FFT bins, weighted toward lower frequencies
-    // so bass gets more visual space (matching human hearing)
     const binMappings: Array<{ start: number; end: number }> = [];
 
-    // Pre-compute colors with brightness boost for bass
-    const colors: string[] = [];
+    // Pre-compute gradient colors (top and bottom for each bar)
+    const colorsTop: string[] = [];
+    const colorsMid: string[] = [];
+    const colorsDim: string[] = [];
     for (let i = 0; i < barCount; i++) {
       const hue = 280 - (i / barCount) * 110;
-      colors.push(`hsl(${hue}, 85%, 60%)`);
+      colorsTop.push(`hsl(${hue}, 90%, 75%)`);   // bright peak
+      colorsMid.push(`hsl(${hue}, 85%, 55%)`);    // mid bar
+      colorsDim.push(`hsla(${hue}, 85%, 55%, 0.4)`); // reflection start
     }
 
-    // Per-bar smoothed values for smooth animation
-    const smoothed = new Float32Array(barCount);
+    // Separate array for reflection end color
+    const colorsFade: string[] = [];
+    for (let i = 0; i < barCount; i++) {
+      const hue = 280 - (i / barCount) * 110;
+      colorsFade.push(`hsla(${hue}, 85%, 55%, 0)`); // fully transparent same hue
+    }
 
-    // Rolling peak for auto-normalization
+    const smoothed = new Float32Array(barCount);
+    const peaks = new Float32Array(barCount);      // peak indicator positions
+    const peakDecay = new Float32Array(barCount);   // peak fall velocity
     let recentPeak = 80;
 
     const initBinMappings = (totalBins: number) => {
       binMappings.length = 0;
-      // Square-root distribution: gentler than full log, spreads bass across
-      // more bars so center doesn't look blocky, while still giving bass
-      // more space than linear
       for (let i = 0; i < barCount; i++) {
         const t0 = i / barCount;
         const t1 = (i + 1) / barCount;
-        // sqrt gives a middle ground between linear and logarithmic
         const start = Math.floor(Math.pow(t0, 1.5) * totalBins);
         const end = Math.min(Math.floor(Math.pow(t1, 1.5) * totalBins), totalBins - 1);
         binMappings.push({ start, end: Math.max(end, start) });
@@ -66,7 +68,7 @@ export function useVisualizer(
 
       analyser.getByteFrequencyData(dataArray);
 
-      // Find peak for normalization
+      // Auto-normalization
       let framePeak = 0;
       for (let i = 0; i < dataArray.length; i++) {
         if (dataArray[i] > framePeak) framePeak = dataArray[i];
@@ -86,13 +88,14 @@ export function useVisualizer(
       const totalBars = barCount * 2;
       const barWidth = (w - gap * (totalBars - 1)) / totalBars;
       const centerX = w / 2;
-      const padding = 24;
-      const maxBarHeight = h - padding;
+
+      // Baseline at 180px — bars go up from here, reflections go down into the player bar
+      const baseline = 180;
+      const maxBarHeight = baseline - 24; // headroom at top
+      const maxReflectionHeight = h - baseline; // ~100px reflection area
 
       for (let i = 0; i < barCount; i++) {
         const mapping = binMappings[i];
-
-        // Average the bins in this logarithmic group
         let sum = 0;
         let count = 0;
         for (let b = mapping.start; b <= mapping.end; b++) {
@@ -100,39 +103,53 @@ export function useVisualizer(
           count++;
         }
         const avg = count > 0 ? sum / count : 0;
+        const normalized = Math.min(avg / normPeak, 1.0);
 
-        // Normalize against recent peak
-        const normalized = avg / normPeak;
+        // Per-band smoothing
+        const bandPosition = i / barCount;
+        const smoothing = 0.2 + bandPosition * 0.5;
+        smoothed[i] = smoothed[i] * smoothing + normalized * (1 - smoothing);
 
-        // Per-band weighting curve: attenuate sub-bass (always loud/pegged),
-        // boost mid-bass (where kicks live), even out mids/highs
-        const bandPosition = i / barCount; // 0 = sub-bass, 1 = treble
-        let weight: number;
-        if (bandPosition < 0.05) {
-          weight = 1.0;
-        } else if (bandPosition < 0.2) {
-          weight = 1.0;
-        } else if (bandPosition < 0.5) {
-          weight = 1.0;
+        const value = smoothed[i];
+        const barHeight = Math.max(value * maxBarHeight, 2);
+
+        // Peak indicator: track and decay
+        if (value > peaks[i]) {
+          peaks[i] = value;
+          peakDecay[i] = 0;
         } else {
-          weight = 1.0;
+          peakDecay[i] += 0.0008; // gravity acceleration
+          peaks[i] = Math.max(peaks[i] - peakDecay[i], 0);
         }
-        const weighted = Math.min(normalized * weight, 1.0);
 
-        // Smooth: bass snappy, treble smoother
-        const smoothing = 0.2 + bandPosition * 0.5; // 0.2 for bass, 0.7 for treble
-        smoothed[i] = smoothed[i] * smoothing + weighted * (1 - smoothing);
+        const drawBarSet = (x: number) => {
+          // --- Main bar with vertical gradient ---
+          const grad = ctx.createLinearGradient(0, baseline - barHeight, 0, baseline);
+          grad.addColorStop(0, colorsTop[i]);   // bright at top
+          grad.addColorStop(1, colorsMid[i]);    // deeper at bottom
+          ctx.fillStyle = grad;
+          ctx.fillRect(x, baseline - barHeight, barWidth, barHeight);
 
-        const barHeight = Math.max(smoothed[i] * maxBarHeight, 2);
+          // --- Reflection below baseline ---
+          const reflectionHeight = Math.min(barHeight * 0.5, maxReflectionHeight);
+          const reflGrad = ctx.createLinearGradient(0, baseline, 0, baseline + reflectionHeight);
+          reflGrad.addColorStop(0, colorsDim[i]);
+          reflGrad.addColorStop(1, colorsFade[i]);
+          ctx.fillStyle = reflGrad;
+          ctx.fillRect(x, baseline, barWidth, reflectionHeight);
 
-        ctx.fillStyle = colors[i];
+          // --- Peak indicator dot ---
+          const peakY = baseline - peaks[i] * maxBarHeight;
+          if (peaks[i] > 0.05) {
+            ctx.fillStyle = colorsTop[i];
+            ctx.fillRect(x, peakY - 2, barWidth, 2);
+          }
+        };
 
-        const y = h - barHeight;
-        const rx = centerX + i * (barWidth + gap);
-        ctx.fillRect(rx, y, barWidth, barHeight);
-
-        const lx = centerX - (i + 1) * (barWidth + gap);
-        ctx.fillRect(lx, y, barWidth, barHeight);
+        // Right side
+        drawBarSet(centerX + i * (barWidth + gap));
+        // Left side (mirror)
+        drawBarSet(centerX - (i + 1) * (barWidth + gap));
       }
     };
 
