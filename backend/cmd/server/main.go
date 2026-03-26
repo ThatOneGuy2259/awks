@@ -14,6 +14,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/auth"
 	"github.com/mccann/awks3/backend/internal/config"
 	"github.com/mccann/awks3/backend/internal/handler"
@@ -51,6 +52,9 @@ func main() {
 	if _, err := pool.Exec(context.Background(), readMigration("002_drop_username_unique.up.sql")); err != nil {
 		log.Printf("migration 002 warning: %v", err)
 	}
+	if _, err := pool.Exec(context.Background(), readMigration("003_audio_status.up.sql")); err != nil {
+		log.Printf("migration 003 warning: %v", err)
+	}
 
 	// Redis
 	rdb, err := redisclient.New(cfg.RedisURL)
@@ -61,16 +65,19 @@ func main() {
 
 	queries := store.New(pool)
 
+	// Audio Broadcaster
+	broadcaster := audio.NewBroadcaster()
+
 	// WebSocket Hub
-	hub := ws.NewHub(nil) // onChange set below
+	hub := ws.NewHub(nil)
 	go hub.Run()
 
 	// Playback Service
 	playbackSvc := service.NewPlaybackService(queries, rdb, func(msg model.WSMessage) {
 		hub.Broadcast(msg)
-	})
+	}, broadcaster)
 
-	// Set hub onChange to broadcast listener updates
+	// Rebuild hub with onChange that broadcasts listener updates
 	hub = ws.NewHub(func() {
 		listeners := hub.GetListeners()
 		hub.Broadcast(model.WSMessage{
@@ -86,31 +93,59 @@ func main() {
 	// Rebuild playback service with the new hub
 	playbackSvc = service.NewPlaybackService(queries, rdb, func(msg model.WSMessage) {
 		hub.Broadcast(msg)
+	}, broadcaster)
+
+	// Audio Extractor — onReady triggers AdvanceQueue if idle
+	extractor := audio.NewExtractor(cfg.YtdlpPath, cfg.AudioCacheDir, queries, func() {
+		state, _ := playbackSvc.GetCurrentState(context.Background())
+		if state == nil {
+			go playbackSvc.AdvanceQueue(context.Background())
+		}
 	})
+
+	// Startup: clean orphan audio files and re-extract pending tracks
+	extractor.CleanupOrphans(context.Background())
+	extractor.ExtractPending(context.Background())
 
 	// Start sync ticker
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	playbackSvc.StartSyncTicker(ctx, hub.ListenerCount)
 
+	// Start broadcaster goroutine
+	go broadcaster.Run(ctx, func() (string, float64, error) {
+		path, err := playbackSvc.GetCurrentAudioPath(context.Background())
+		if err != nil || path == "" {
+			return "", 0, err
+		}
+		// Check if we're resuming mid-track (server restart)
+		state, _ := playbackSvc.GetCurrentState(context.Background())
+		var offset float64
+		if state != nil {
+			offset = time.Since(state.StartedAt).Seconds()
+			if offset < 1 {
+				offset = 0 // just started, no need to seek
+			}
+		}
+		return path, offset, nil
+	}, func(skipped bool) {
+		if !skipped {
+			playbackSvc.AdvanceQueue(context.Background())
+		}
+		// If skipped, SkipCurrent already handled advancement
+	})
+
 	// Resume playback if server restarts mid-track
 	go func() {
 		state, _ := playbackSvc.GetCurrentState(context.Background())
 		if state != nil {
-			elapsed := time.Since(state.StartedAt)
-			remaining := time.Duration(state.DurationSec)*time.Second - elapsed
-			if remaining > 0 {
-				time.AfterFunc(remaining+5*time.Second, func() {
-					playbackSvc.AdvanceQueue(context.Background())
-				})
-			} else {
-				playbackSvc.AdvanceQueue(context.Background())
-			}
+			// Wake the broadcaster to stream the current track
+			broadcaster.Wake()
 		}
 	}()
 
 	// Handlers
-	queueH := handler.NewQueueHandler(queries, playbackSvc, hub, cfg.YouTubeAPIKey)
+	queueH := handler.NewQueueHandler(queries, playbackSvc, hub, cfg.YouTubeAPIKey, extractor)
 	playbackH := handler.NewPlaybackHandler(playbackSvc)
 	adminH := handler.NewAdminHandler(queries, playbackSvc, hub)
 	wsH := handler.NewWSHandler(hub)
@@ -118,6 +153,7 @@ func main() {
 	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey)
 	listenerH := handler.NewListenerHandler(hub)
 	meH := handler.NewMeHandler(queries)
+	streamH := handler.NewStreamHandler(broadcaster)
 
 	// Router
 	r := chi.NewRouter()
@@ -130,8 +166,11 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// WebSocket (no auth middleware for dev)
+	// WebSocket (no auth middleware)
 	r.Get("/ws", wsH.HandleWS)
+
+	// Audio stream (no auth — <audio> element can't send headers easily)
+	r.Get("/api/stream", streamH.HandleStream)
 
 	// API routes with auth
 	r.Route("/api", func(r chi.Router) {
@@ -147,7 +186,7 @@ func main() {
 		r.Get("/listeners", listenerH.GetListeners)
 		r.Get("/search", searchH.Search)
 		r.Post("/me", meH.SyncMe)
-		r.Get("/settings", adminH.GetSettings) // readable by all authenticated users
+		r.Get("/settings", adminH.GetSettings)
 
 		// Admin routes
 		r.Route("/admin", func(r chi.Router) {
