@@ -43,7 +43,7 @@ function AuthenticatedApp() {
 
 function AppContent() {
   useWebSocket();
-  const { volume, setVolume, listening } = useWebRTC();
+  const { volume, setVolume, listening, analyserRef } = useWebRTC();
 
   return (
     <>
@@ -59,7 +59,7 @@ function AppContent() {
         </Routes>
       </main>
 
-      <PlayerBar volume={volume} onVolumeChange={setVolume} />
+      <PlayerBar volume={volume} onVolumeChange={setVolume} analyserRef={analyserRef} />
       <BottomNav />
     </>
   );

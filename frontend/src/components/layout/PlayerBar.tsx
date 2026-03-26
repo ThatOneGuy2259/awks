@@ -1,19 +1,25 @@
+import { useRef } from 'react';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useSkipVoteStore } from '../../stores/skipVoteStore';
 import { usePlaybackSync, formatTime } from '../../hooks/usePlaybackSync';
 import { VolumeSlider } from '../player/VolumeSlider';
 import { api } from '../../lib/api';
+import { useVisualizer } from '../../hooks/useVisualizer';
 
 interface PlayerBarProps {
   volume: number;
   onVolumeChange: (v: number) => void;
+  analyserRef: React.RefObject<AnalyserNode | null>;
 }
 
-export function PlayerBar({ volume, onVolumeChange }: PlayerBarProps) {
+export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProps) {
   const track = usePlaybackStore((s) => s.currentTrack);
   const { votes, votedByMe, getVotesRequired } = useSkipVoteStore();
   const votesRequired = getVotesRequired();
   const { elapsed, duration } = usePlaybackSync();
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useVisualizer(canvasRef, analyserRef);
 
   if (!track) return null;
 
@@ -34,7 +40,7 @@ export function PlayerBar({ volume, onVolumeChange }: PlayerBarProps) {
   };
 
   return (
-    <footer className="hidden lg:flex fixed bottom-0 left-64 right-0 h-24 bg-[#0e0e13]/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50">
+    <footer className="hidden lg:flex fixed bottom-0 left-64 right-0 h-24 bg-[#0e0e13]/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50 relative">
       {/* Left: Track info */}
       <div className="flex items-center gap-4 w-1/3 flex-shrink-0">
         <div className="w-12 h-12 rounded-lg overflow-hidden">
@@ -82,6 +88,13 @@ export function PlayerBar({ volume, onVolumeChange }: PlayerBarProps) {
       <div className="flex items-center justify-end w-1/3 flex-shrink-0">
         <VolumeSlider volume={volume} onChange={onVolumeChange} />
       </div>
+      {/* Visualizer */}
+      <canvas
+        ref={canvasRef}
+        width={800}
+        height={28}
+        className="absolute bottom-0 left-0 right-0 h-7 w-full opacity-60"
+      />
     </footer>
   );
 }

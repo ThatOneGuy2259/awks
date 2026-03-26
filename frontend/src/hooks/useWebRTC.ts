@@ -9,6 +9,7 @@ const ICE_SERVERS = [
 
 export function useWebRTC() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const volumeRef = useRef(70);
   const connectedRef = useRef(false);
@@ -47,6 +48,20 @@ export function useWebRTC() {
       audioRef.current = audio;
       audio.srcObject = event.streams[0];
       audio.volume = volumeRef.current / 100;
+
+      // Set up Web Audio API analyser for visualizer
+      try {
+        const ctx = new AudioContext();
+        const source = ctx.createMediaElementSource(audio);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 64;
+        source.connect(analyser);
+        analyser.connect(ctx.destination);
+        analyserRef.current = analyser;
+      } catch (e) {
+        console.warn('[webrtc] failed to create analyser:', e);
+      }
+
       audio.play().then(() => {
         console.log('[webrtc] audio playing');
         connectedRef.current = true;
@@ -166,5 +181,5 @@ export function useWebRTC() {
     }
   }, []);
 
-  return { volume, setVolume, listening };
+  return { volume, setVolume, listening, analyserRef };
 }
