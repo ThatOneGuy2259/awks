@@ -127,9 +127,14 @@ func main() {
 		state, _ := playbackSvc.GetCurrentState(context.Background())
 		var offset float64
 		if state != nil {
-			offset = time.Since(state.StartedAt).Seconds()
-			if offset < 1 {
-				offset = 0
+			elapsed := time.Since(state.StartedAt).Seconds()
+			// Don't seek past the track duration — if the track already ended,
+			// return empty so the broadcaster advances instead of seeking into EOF
+			if elapsed >= float64(state.DurationSec) {
+				return "", 0, nil
+			}
+			if elapsed > 1 {
+				offset = elapsed
 			}
 		}
 		return path, offset, nil

@@ -65,20 +65,37 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 			AudioPath:   pgtype.Text{},
 		})
 
-		// Run yt-dlp
+		// Run yt-dlp to extract audio (yt-dlp appends .opus to the output name)
+		tmpBase := filepath.Join(e.cacheDir, idStr+"-tmp")
+		tmpPath := tmpBase + ".opus" // what yt-dlp will actually create
 		cmd := exec.Command(e.ytdlpPath,
 			"-x",
 			"--audio-format", "opus",
 			"--audio-quality", "128K",
 			"--no-playlist",
 			"--no-warnings",
-			"-o", outputPath,
+			"-o", tmpBase+".%(ext)s",
 			youtubeURL,
 		)
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("[extractor] yt-dlp failed for %s: %v\n%s", idStr, err, string(output))
+			os.Remove(tmpPath)
+			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
+				ID:          queueID,
+				AudioStatus: "failed",
+				AudioPath:   pgtype.Text{},
+			})
+			return
+		}
+
+		// Repackage OGG so each page has one 20ms Opus frame (required for WebRTC)
+		repackCmd := exec.Command("ffmpeg", "-y", "-i", tmpPath, "-c:a", "copy", "-page_duration", "20000", outputPath)
+		repackOut, repackErr := repackCmd.CombinedOutput()
+		os.Remove(tmpPath)
+		if repackErr != nil {
+			log.Printf("[extractor] ffmpeg repackage failed for %s: %v\n%s", idStr, repackErr, string(repackOut))
 			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 				ID:          queueID,
 				AudioStatus: "failed",

@@ -105,15 +105,7 @@ export function useWebSocket() {
   useEffect(() => {
     if (!userId) return;
     connectWs(userId, username, avatarUrl);
-
-    return () => {
-      if (reconnectTimer) {
-        clearTimeout(reconnectTimer);
-        reconnectTimer = null;
-      }
-      ws?.close();
-      ws = null;
-    };
+    // Do NOT close on unmount — singleton persists across StrictMode remounts
   }, [userId, username, avatarUrl]);
 }
 

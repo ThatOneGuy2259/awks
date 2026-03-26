@@ -101,18 +101,22 @@ func (pm *PeerManager) HandleOffer(clientID string, offerSDP string, sendToClien
 		pc.Close()
 		return fmt.Errorf("failed to create answer: %w", err)
 	}
+
+	// Wait for ICE gathering to complete so all candidates are in the SDP
+	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
 		pc.Close()
 		return fmt.Errorf("failed to set local description: %w", err)
 	}
+	<-gatherComplete
 
 	// Store the peer connection
 	pm.mu.Lock()
 	pm.peers[clientID] = pc
 	pm.mu.Unlock()
 
-	// Send the answer back to the client
-	sendToClient("WEBRTC_ANSWER", map[string]string{"sdp": answer.SDP})
+	// Send the answer with all ICE candidates embedded in the SDP
+	sendToClient("WEBRTC_ANSWER", map[string]string{"sdp": pc.LocalDescription().SDP})
 
 	return nil
 }

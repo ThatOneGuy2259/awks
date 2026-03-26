@@ -157,6 +157,10 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 			return false
 		}
 
+		if lastGranule == 0 || pageHeader.GranulePosition%480000 == 0 {
+			log.Printf("[broadcaster] wrote sample: %d bytes, duration=%v, granule=%d", len(pageData), sampleDuration, pageHeader.GranulePosition)
+		}
+
 		lastGranule = pageHeader.GranulePosition
 
 		// Pace: sleep to maintain real-time playback
