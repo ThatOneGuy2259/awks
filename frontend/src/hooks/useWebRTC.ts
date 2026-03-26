@@ -50,13 +50,15 @@ export function useWebRTC() {
       audio.volume = volumeRef.current / 100;
 
       // Set up Web Audio API analyser for visualizer
+      // Must use createMediaStreamSource for WebRTC streams, not createMediaElementSource
       try {
         const ctx = new AudioContext();
-        const source = ctx.createMediaElementSource(audio);
+        const source = ctx.createMediaStreamSource(event.streams[0]);
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 64;
         source.connect(analyser);
-        analyser.connect(ctx.destination);
+        // Don't connect analyser to destination — the <audio> element already handles playback.
+        // Connecting to destination would cause double audio output.
         analyserRef.current = analyser;
       } catch (e) {
         console.warn('[webrtc] failed to create analyser:', e);
