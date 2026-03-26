@@ -11,6 +11,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearHistory = `-- name: ClearHistory :exec
+DELETE FROM play_history
+`
+
+func (q *Queries) ClearHistory(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, clearHistory)
+	return err
+}
+
+const deleteHistoryEntry = `-- name: DeleteHistoryEntry :exec
+DELETE FROM play_history WHERE id = $1
+`
+
+func (q *Queries) DeleteHistoryEntry(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteHistoryEntry, id)
+	return err
+}
+
 const getHistory = `-- name: GetHistory :many
 SELECT h.id, h.video_id, h.title, h.artist, h.duration_sec, h.requested_by, h.played_at, h.skipped, u.username as requester_name
 FROM play_history h

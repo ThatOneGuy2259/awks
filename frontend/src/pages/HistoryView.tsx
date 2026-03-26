@@ -1,14 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import type { HistoryEntry } from '../lib/api';
+import { useUserStore } from '../stores/userStore';
 
 export function HistoryView() {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const isAdmin = useUserStore((s) => s.role === 'admin');
 
-  useEffect(() => {
+  const fetchHistory = useCallback(() => {
+    setLoading(true);
     api.getHistory(20, 0)
       .then((data) => {
         setEntries(data);
@@ -17,6 +20,10 @@ export function HistoryView() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
 
   const loadMore = useCallback(() => {
     if (loadingMore || !hasMore) return;
@@ -29,6 +36,25 @@ export function HistoryView() {
       .catch(() => {})
       .finally(() => setLoadingMore(false));
   }, [entries.length, loadingMore, hasMore]);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.deleteHistoryEntry(id);
+      setEntries((prev) => prev.filter((e) => e.id !== id));
+    } catch (err) {
+      console.error('delete history entry failed:', err);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm('Clear all history? This cannot be undone.')) return;
+    try {
+      await api.clearHistory();
+      setEntries([]);
+    } catch (err) {
+      console.error('clear history failed:', err);
+    }
+  };
 
   function formatTime(sec: number) {
     const m = Math.floor(sec / 60);
@@ -60,9 +86,20 @@ export function HistoryView() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-      <div>
-        <h2 className="text-3xl font-black font-headline tracking-tighter text-on-surface">History</h2>
-        <p className="text-sm text-on-surface-variant mt-1">Previously played tracks</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-black font-headline tracking-tighter text-on-surface">History</h2>
+          <p className="text-sm text-on-surface-variant mt-1">Previously played tracks</p>
+        </div>
+        {isAdmin && entries.length > 0 && (
+          <button
+            onClick={handleClearAll}
+            className="flex items-center gap-2 px-4 py-2 rounded-full border border-red-500/20 text-red-400 text-xs font-bold hover:bg-red-500/10 transition-colors"
+          >
+            <span className="material-symbols-outlined text-sm">delete_sweep</span>
+            Clear All
+          </button>
+        )}
       </div>
 
       {entries.length === 0 ? (
@@ -100,6 +137,15 @@ export function HistoryView() {
               <div className="flex items-center gap-4 flex-shrink-0">
                 <span className="text-xs text-on-surface-variant tabular-nums">{formatTime(entry.duration_sec)}</span>
                 <span className="text-xs text-on-surface-variant/60 w-16 text-right">{formatDate(entry.played_at)}</span>
+                {isAdmin && (
+                  <button
+                    onClick={() => handleDelete(entry.id)}
+                    className="p-1 text-on-surface-variant/40 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Remove from history"
+                  >
+                    <span className="material-symbols-outlined text-sm">close</span>
+                  </button>
+                )}
               </div>
             </div>
           ))}

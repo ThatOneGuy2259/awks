@@ -12,9 +12,11 @@ import (
 
 type Querier interface {
 	CastSkipVote(ctx context.Context, arg CastSkipVoteParams) error
+	ClearHistory(ctx context.Context) error
 	CountSkipVotes(ctx context.Context, queueID pgtype.UUID) (int64, error)
 	CountUserPendingTracks(ctx context.Context, requestedBy string) (int64, error)
 	CreateTimeout(ctx context.Context, arg CreateTimeoutParams) (UserTimeout, error)
+	DeleteHistoryEntry(ctx context.Context, id pgtype.UUID) error
 	DeleteQueueItem(ctx context.Context, id pgtype.UUID) error
 	DeleteSkipVotesForTrack(ctx context.Context, queueID pgtype.UUID) error
 	DeleteTimeout(ctx context.Context, userID string) error

@@ -8,3 +8,9 @@ FROM play_history h
 JOIN users u ON h.requested_by = u.id
 ORDER BY h.played_at DESC
 LIMIT $1 OFFSET $2;
+
+-- name: DeleteHistoryEntry :exec
+DELETE FROM play_history WHERE id = $1;
+
+-- name: ClearHistory :exec
+DELETE FROM play_history;

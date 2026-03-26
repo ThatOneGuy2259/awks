@@ -203,6 +203,8 @@ func main() {
 			r.Post("/users/{id}/timeout", adminH.TimeoutUser)
 			r.Delete("/users/{id}/timeout", adminH.RemoveTimeout)
 			r.Get("/users/{id}/timeout", adminH.GetTimeout)
+			r.Delete("/history/{id}", historyH.DeleteEntry)
+			r.Delete("/history", historyH.ClearAll)
 		})
 	})
 

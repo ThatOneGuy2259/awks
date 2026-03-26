@@ -55,6 +55,10 @@ export const api = {
     request<{ timed_out: boolean; expires_at?: string; reason?: string }>(
       `/api/admin/users/${userId}/timeout`
     ),
+  deleteHistoryEntry: (id: string) =>
+    request<void>(`/api/admin/history/${id}`, { method: 'DELETE' }),
+  clearHistory: () =>
+    request<void>('/api/admin/history', { method: 'DELETE' }),
 };
 
 // Types
