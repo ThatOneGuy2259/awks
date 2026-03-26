@@ -107,23 +107,26 @@ export function AdminDashboardView() {
 
           {/* Active Listeners */}
           <div className="bg-surface-container-low rounded-2xl p-6">
-            <h3 className="text-lg font-bold font-headline mb-4">Active Listeners</h3>
-            <div className="space-y-4">
-              {listeners.slice(0, 5).map((listener) => (
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold font-headline">Active Listeners</h3>
+              <span className="text-xs text-on-surface-variant">{listeners.length} online</span>
+            </div>
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+              {listeners.map((listener) => (
                 <div key={listener.id} className="flex items-center gap-3">
                   {listener.avatar_url ? (
-                    <img className="w-10 h-10 rounded-full" src={listener.avatar_url} alt={listener.username} />
+                    <img className="w-10 h-10 rounded-full flex-shrink-0" src={listener.avatar_url} alt={listener.username} />
                   ) : (
-                    <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary font-bold text-sm">
+                    <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
                       {listener.username.charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div className="flex-1">
-                    <p className="text-sm font-bold">{listener.username}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold truncate">{listener.username}</p>
                   </div>
                   <button
                     onClick={() => setTimeoutTarget({ id: listener.id, username: listener.username })}
-                    className="p-2 text-on-surface-variant hover:text-error transition-colors"
+                    className="p-2 text-on-surface-variant hover:text-error transition-colors flex-shrink-0"
                     title="Timeout"
                   >
                     <span className="material-symbols-outlined text-sm">block</span>

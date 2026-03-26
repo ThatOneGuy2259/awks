@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import { useListenerStore } from '../../stores/listenerStore';
 
 export function OnlineListeners() {
   const { count, listeners } = useListenerStore();
-  const displayed = listeners.slice(0, 8);
-  const overflow = count - displayed.length;
+  const [expanded, setExpanded] = useState(false);
+  const maxCollapsed = 12;
+  const displayed = expanded ? listeners : listeners.slice(0, maxCollapsed);
+  const hasMore = listeners.length > maxCollapsed;
 
   return (
     <section className="bg-surface-container-low rounded-lg p-6 space-y-6">
@@ -29,17 +32,24 @@ export function OnlineListeners() {
                 </div>
               )}
             </div>
+            {/* Hover tooltip with name */}
+            <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-surface-container-highest text-on-surface text-[10px] font-bold px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+              {listener.username}
+            </div>
             {i === 0 && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-secondary rounded-full border-2 border-surface-container-low" />
             )}
           </div>
         ))}
-        {overflow > 0 && (
-          <div className="relative flex items-center justify-center w-full aspect-square rounded-full bg-surface-container-high text-on-surface-variant text-xs font-bold hover:bg-surface-variant cursor-pointer transition-colors">
-            +{overflow}
-          </div>
-        )}
       </div>
+      {hasMore && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full text-center text-xs text-on-surface-variant hover:text-primary transition-colors py-1"
+        >
+          {expanded ? 'Show less' : `Show all ${listeners.length} listeners`}
+        </button>
+      )}
     </section>
   );
 }
