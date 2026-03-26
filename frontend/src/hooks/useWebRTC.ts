@@ -1,5 +1,4 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
-import { usePlaybackStore } from '../stores/playbackStore';
 import { wsSend, onWsMessage, offWsMessage } from './useWebSocket';
 
 const ICE_SERVERS = [
@@ -9,8 +8,8 @@ const ICE_SERVERS = [
 
 export function useWebRTC() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const volumeRef = useRef(70);
   const connectedRef = useRef(false);
   const [volume, setVolumeState] = useState(() => {
@@ -20,21 +19,18 @@ export function useWebRTC() {
     return v;
   });
   const [listening, setListening] = useState(false);
-  const hasTrack = usePlaybackStore((s) => !!s.currentTrack);
 
-  // Connect to WebRTC — no state dependencies, uses refs only
   const connect = useCallback(() => {
-    // Don't reconnect if already connected
     if (connectedRef.current && pcRef.current && pcRef.current.iceConnectionState === 'connected') {
       return;
     }
 
-    // Clean up existing connection
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
     }
     connectedRef.current = false;
+    analyserRef.current = null;
 
     console.log('[webrtc] creating peer connection...');
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -49,19 +45,40 @@ export function useWebRTC() {
       audio.srcObject = event.streams[0];
       audio.volume = volumeRef.current / 100;
 
-      // Set up Web Audio API analyser for visualizer
-      // Must use createMediaStreamSource for WebRTC streams, not createMediaElementSource
-      try {
-        const ctx = new AudioContext();
-        const source = ctx.createMediaStreamSource(event.streams[0]);
-        const analyser = ctx.createAnalyser();
-        analyser.fftSize = 64;
-        source.connect(analyser);
-        // Don't connect analyser to destination — the <audio> element already handles playback.
-        // Connecting to destination would cause double audio output.
-        analyserRef.current = analyser;
-      } catch (e) {
-        console.warn('[webrtc] failed to create analyser:', e);
+      // Set up analyser — deferred until user gesture if needed
+      const stream = event.streams[0];
+      const setupAnalyser = () => {
+        if (analyserRef.current) return; // already set up
+        try {
+          const ctx = new AudioContext();
+          const source = ctx.createMediaStreamSource(stream);
+          const analyser = ctx.createAnalyser();
+          analyser.fftSize = 256;
+          analyser.smoothingTimeConstant = 0.4; // lower = more reactive
+          analyser.minDecibels = -80;
+          analyser.maxDecibels = -10;
+          source.connect(analyser);
+          analyserRef.current = analyser;
+          console.log('[webrtc] analyser created, state:', ctx.state);
+        } catch (e) {
+          console.warn('[webrtc] failed to create analyser:', e);
+        }
+      };
+
+      // Try immediately, defer to click if suspended
+      const testCtx = new AudioContext();
+      if (testCtx.state === 'running') {
+        testCtx.close();
+        setupAnalyser();
+      } else {
+        testCtx.close();
+        const handler = () => {
+          setupAnalyser();
+          document.removeEventListener('click', handler);
+          document.removeEventListener('keydown', handler);
+        };
+        document.addEventListener('click', handler);
+        document.addEventListener('keydown', handler);
       }
 
       audio.play().then(() => {
@@ -102,7 +119,6 @@ export function useWebRTC() {
         setListening(false);
         setTimeout(connect, 2000);
       } else if (pc.iceConnectionState === 'disconnected') {
-        // Give it 3 seconds to recover before reconnecting
         disconnectTimer = setTimeout(() => {
           if (pc.iceConnectionState === 'disconnected') {
             console.log('[webrtc] still disconnected, reconnecting...');
@@ -122,9 +138,9 @@ export function useWebRTC() {
     }).catch((err) => {
       console.error('[webrtc] offer error:', err);
     });
-  }, []); // No dependencies — uses refs
+  }, []);
 
-  // Listen for signaling responses from server
+  // Listen for signaling responses
   useEffect(() => {
     onWsMessage('WEBRTC_ANSWER', (data: unknown) => {
       console.log('[webrtc] received answer from server');
@@ -140,9 +156,7 @@ export function useWebRTC() {
       const pc = pcRef.current;
       if (!pc) return;
       const candidate = data as RTCIceCandidateInit;
-      pc.addIceCandidate(candidate).catch((err) => {
-        console.error('[webrtc] ICE candidate error:', err);
-      });
+      pc.addIceCandidate(candidate).catch(() => {});
     });
 
     return () => {
@@ -151,28 +165,11 @@ export function useWebRTC() {
     };
   }, []);
 
-  // Connect when there's a track — delay avoids StrictMode double-connect
+  // Connect once on mount — keep the connection alive across track changes
   useEffect(() => {
-    if (hasTrack) {
-      const timer = setTimeout(() => {
-        // Only connect if not already connected (StrictMode guard)
-        if (!connectedRef.current) {
-          connect();
-        }
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else {
-      connectedRef.current = false;
-      if (pcRef.current) {
-        pcRef.current.close();
-        pcRef.current = null;
-      }
-      if (audioRef.current) {
-        audioRef.current.srcObject = null;
-      }
-      setListening(false);
-    }
-  }, [hasTrack, connect]);
+    const timer = setTimeout(connect, 1000);
+    return () => clearTimeout(timer);
+  }, [connect]);
 
   const setVolume = useCallback((vol: number) => {
     volumeRef.current = vol;

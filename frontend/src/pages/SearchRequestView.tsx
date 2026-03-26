@@ -4,6 +4,7 @@ import { TrackCard } from '../components/search/TrackCard';
 import { api, type SearchResult } from '../lib/api';
 import { useQueueStore } from '../stores/queueStore';
 import { useUserStore } from '../stores/userStore';
+import { useSettingsStore } from '../stores/settingsStore';
 
 const trendingSuggestions = ['Phonk', 'Midnight Lo-fi', 'Cyberpunk 2077', 'Hyperpop', 'Synthwave', 'Chillhop'];
 
@@ -15,7 +16,7 @@ export function SearchRequestView() {
 
   const tracks = useQueueStore((s) => s.tracks);
   const userId = useUserStore((s) => s.id);
-  const maxTracks = 3;
+  const maxTracks = useSettingsStore((s) => s.maxTracksPerUser);
 
   const myPendingCount = tracks.filter(
     (t) => t.requested_by === userId && (t.status === 'pending' || t.status === 'playing')

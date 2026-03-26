@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useSkipVoteStore } from '../../stores/skipVoteStore';
 import { usePlaybackSync, formatTime } from '../../hooks/usePlaybackSync';
@@ -18,8 +17,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   const votesRequired = getVotesRequired();
   const { elapsed, duration } = usePlaybackSync();
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  useVisualizer(canvasRef, analyserRef);
+  const canvasRef = useVisualizer(analyserRef);
 
   if (!track) return null;
 
@@ -40,7 +38,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   };
 
   return (
-    <footer className="hidden lg:flex fixed bottom-0 left-64 right-0 h-24 bg-[#0e0e13]/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50 overflow-hidden">
+    <footer className="hidden lg:flex fixed bottom-0 left-64 right-0 h-24 bg-[#0e0e13]/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50">
       {/* Left: Track info */}
       <div className="flex items-center gap-4 w-1/3 flex-shrink-0">
         <div className="w-12 h-12 rounded-lg overflow-hidden">
@@ -91,9 +89,9 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
       {/* Visualizer */}
       <canvas
         ref={canvasRef}
-        width={800}
-        height={28}
-        className="absolute bottom-0 left-0 right-0 h-7 w-full opacity-60"
+        width={1200}
+        height={180}
+        className="absolute -top-[180px] left-0 right-0 h-[180px] w-full pointer-events-none"
       />
     </footer>
   );

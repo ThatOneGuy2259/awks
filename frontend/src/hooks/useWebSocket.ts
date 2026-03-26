@@ -5,6 +5,7 @@ import { useQueueStore } from '../stores/queueStore';
 import { useSkipVoteStore } from '../stores/skipVoteStore';
 import { useListenerStore } from '../stores/listenerStore';
 import { useChatStore } from '../stores/chatStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { api } from '../lib/api';
 
 const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`;
@@ -64,6 +65,9 @@ function connectWs(userId: string, username: string, avatarUrl: string) {
       }
       if (settings.skip_percent) {
         useSkipVoteStore.getState().setSkipPercent(Number(settings.skip_percent));
+      }
+      if (settings.max_tracks_per_user) {
+        useSettingsStore.getState().setMaxTracksPerUser(Number(settings.max_tracks_per_user));
       }
     }).catch(() => {});
     api.getListeners().then((data) => {
@@ -167,10 +171,11 @@ function handleMessage(msg: { type: string; data: unknown }) {
       break;
     }
     case 'SETTINGS_UPDATE': {
-      const d = data as { skip_votes_required: number; skip_mode: string; skip_percent: number };
+      const d = data as { skip_votes_required: number; skip_mode: string; skip_percent: number; max_tracks_per_user: number };
       useSkipVoteStore.getState().setFixedRequired(d.skip_votes_required);
       if (d.skip_mode) useSkipVoteStore.getState().setSkipMode(d.skip_mode);
       if (d.skip_percent) useSkipVoteStore.getState().setSkipPercent(d.skip_percent);
+      if (d.max_tracks_per_user) useSettingsStore.getState().setMaxTracksPerUser(d.max_tracks_per_user);
       break;
     }
     case 'CHAT_MESSAGE': {
