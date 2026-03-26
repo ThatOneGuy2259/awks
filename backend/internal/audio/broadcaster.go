@@ -1,39 +1,45 @@
 package audio
 
 import (
-	"bufio"
 	"context"
-	"encoding/base64"
-	"fmt"
 	"io"
 	"log"
-	"net"
-	"net/url"
 	"os"
-	"strings"
 	"time"
+
+	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media"
+	"github.com/pion/webrtc/v4/pkg/media/oggreader"
 )
 
-// Broadcaster reads audio files at real-time pace and pipes OGG pages
-// into an Icecast server as a source client via raw HTTP PUT.
+// Broadcaster reads OGG/Opus audio files and writes Opus samples to a
+// shared WebRTC track at real-time pace. All peer connections that have
+// this track added will receive the audio.
 type Broadcaster struct {
-	icecastURL string
-	mount      string
-	password   string
-	conn       net.Conn     // raw TCP connection to Icecast
-	writer     *bufio.Writer // buffered writer on top of conn
-	skipCh     chan struct{}
-	wakeCh     chan struct{}
+	track  *webrtc.TrackLocalStaticSample
+	skipCh chan struct{}
+	wakeCh chan struct{}
 }
 
-func NewBroadcaster(icecastURL, mount, sourcePassword string) *Broadcaster {
-	return &Broadcaster{
-		icecastURL: icecastURL,
-		mount:      mount,
-		password:   sourcePassword,
-		skipCh:     make(chan struct{}, 1),
-		wakeCh:     make(chan struct{}, 1),
+func NewBroadcaster() (*Broadcaster, error) {
+	track, err := webrtc.NewTrackLocalStaticSample(
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
+		"audio",
+		"awks-radio",
+	)
+	if err != nil {
+		return nil, err
 	}
+	return &Broadcaster{
+		track:  track,
+		skipCh: make(chan struct{}, 1),
+		wakeCh: make(chan struct{}, 1),
+	}, nil
+}
+
+// Track returns the shared audio track that should be added to each peer connection.
+func (b *Broadcaster) Track() *webrtc.TrackLocalStaticSample {
+	return b.track
 }
 
 // Skip signals the broadcaster to stop the current track immediately.
@@ -52,108 +58,6 @@ func (b *Broadcaster) Wake() {
 	}
 }
 
-// connect opens a raw TCP connection to Icecast and sends the HTTP PUT
-// source request headers. Returns an error if the connection fails or
-// Icecast rejects the source.
-func (b *Broadcaster) connect() error {
-	parsed, err := url.Parse(b.icecastURL)
-	if err != nil {
-		return fmt.Errorf("invalid icecast URL: %w", err)
-	}
-
-	host := parsed.Host
-	if !strings.Contains(host, ":") {
-		host += ":8000"
-	}
-
-	conn, err := net.DialTimeout("tcp", host, 5*time.Second)
-	if err != nil {
-		return fmt.Errorf("failed to connect to icecast at %s: %w", host, err)
-	}
-
-	// Send HTTP PUT request headers manually
-	auth := base64.StdEncoding.EncodeToString([]byte("source:" + b.password))
-	reqHeaders := fmt.Sprintf(
-		"PUT %s HTTP/1.0\r\n"+
-			"Authorization: Basic %s\r\n"+
-			"Content-Type: application/ogg\r\n"+
-			"Ice-Name: AWKS Radio\r\n"+
-			"Ice-Description: Fill the Awkward Silence\r\n"+
-			"Ice-Genre: Various\r\n"+
-			"Ice-Public: 0\r\n"+
-			"\r\n",
-		b.mount, auth,
-	)
-
-	conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	if _, err := conn.Write([]byte(reqHeaders)); err != nil {
-		conn.Close()
-		return fmt.Errorf("failed to send headers to icecast: %w", err)
-	}
-
-	// Read the response status line
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	reader := bufio.NewReader(conn)
-	statusLine, err := reader.ReadString('\n')
-	if err != nil {
-		conn.Close()
-		return fmt.Errorf("failed to read icecast response: %w", err)
-	}
-
-	if !strings.Contains(statusLine, "200") {
-		conn.Close()
-		return fmt.Errorf("icecast rejected source: %s", strings.TrimSpace(statusLine))
-	}
-
-	// Drain remaining response headers
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil || strings.TrimSpace(line) == "" {
-			break
-		}
-	}
-
-	// Clear deadlines for streaming
-	conn.SetWriteDeadline(time.Time{})
-	conn.SetReadDeadline(time.Time{})
-
-	b.conn = conn
-	b.writer = bufio.NewWriterSize(conn, 16384)
-
-	return nil
-}
-
-func (b *Broadcaster) disconnect() {
-	if b.writer != nil {
-		b.writer.Flush()
-		b.writer = nil
-	}
-	if b.conn != nil {
-		b.conn.Close()
-		b.conn = nil
-	}
-}
-
-// write writes data to the Icecast connection. Returns false if the write failed.
-func (b *Broadcaster) write(data []byte) bool {
-	if b.writer == nil {
-		return false
-	}
-	_, err := b.writer.Write(data)
-	if err != nil {
-		log.Printf("[broadcaster] icecast write error: %v", err)
-		b.disconnect()
-		return false
-	}
-	// Flush periodically to ensure data gets to Icecast
-	if err := b.writer.Flush(); err != nil {
-		log.Printf("[broadcaster] icecast flush error: %v", err)
-		b.disconnect()
-		return false
-	}
-	return true
-}
-
 // Run is the main broadcaster loop.
 func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, float64, error), onTrackDone func(skipped bool)) {
 	for {
@@ -165,8 +69,6 @@ func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, floa
 		}
 
 		if audioPath == "" {
-			// No track — disconnect from Icecast (avoid idle timeout) and wait
-			b.disconnect()
 			select {
 			case <-ctx.Done():
 				return
@@ -175,25 +77,14 @@ func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, floa
 			}
 		}
 
-		// Connect to Icecast right before streaming (fresh connection per track)
-		if b.conn == nil {
-			if err := b.connect(); err != nil {
-				log.Printf("[broadcaster] %v, retrying in 2s...", err)
-				time.Sleep(2 * time.Second)
-				continue
-			}
-			log.Println("[broadcaster] connected to icecast")
-		}
-
+		log.Printf("[broadcaster] streaming %s (offset=%.1fs)", audioPath, startOffset)
 		skipped := b.streamFile(ctx, audioPath, startOffset)
 		onTrackDone(skipped)
 	}
 }
 
-// streamFile reads an OGG file and writes it to Icecast at real-time pace.
+// streamFile reads an OGG/Opus file and writes samples to the WebRTC track at real-time pace.
 func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSec float64) bool {
-	log.Printf("[broadcaster] streaming %s (offset=%.1fs)", path, startOffsetSec)
-
 	f, err := os.Open(path)
 	if err != nil {
 		log.Printf("[broadcaster] failed to open %s: %v", path, err)
@@ -201,45 +92,35 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 	}
 	defer f.Close()
 
-	reader := NewOggReader(f)
-
-	// Read and send the Opus header pages (ID header + comment header).
-	for i := 0; i < 2; i++ {
-		page, err := reader.ReadPage()
-		if err != nil {
-			log.Printf("[broadcaster] failed to read header page %d: %v", i, err)
-			return false
-		}
-		if !b.write(page.Data) {
-			log.Printf("[broadcaster] failed to write header page %d to icecast", i)
-			return false
-		}
+	ogg, _, err := oggreader.NewWith(f)
+	if err != nil {
+		log.Printf("[broadcaster] failed to create ogg reader: %v", err)
+		return false
 	}
-	log.Printf("[broadcaster] sent OGG headers to icecast")
 
-	var lastGranule int64
+	// Read pages, calculate timing from granule positions
+	var lastGranule uint64
 
-	// If resuming mid-track, skip pages until we reach the target position
+	// If resuming mid-track, skip pages until target position
 	if startOffsetSec > 0 {
+		targetGranule := uint64(startOffsetSec * 48000)
 		for {
-			page, err := reader.ReadPage()
+			pageData, pageHeader, err := ogg.ParseNextPage()
 			if err != nil {
 				log.Printf("[broadcaster] seek failed: %v", err)
 				return false
 			}
-			if page.GranulePosition > 0 && GranuleToSeconds(page.GranulePosition) >= startOffsetSec {
-				if !b.write(page.Data) {
-					return false
-				}
-				lastGranule = page.GranulePosition
+			_ = pageData
+			if pageHeader.GranulePosition >= targetGranule {
+				lastGranule = pageHeader.GranulePosition
 				break
 			}
 		}
-		log.Printf("[broadcaster] seeked to %.1fs in %s", startOffsetSec, path)
+		log.Printf("[broadcaster] seeked to %.1fs", startOffsetSec)
 	}
 
 	startTime := time.Now()
-	granuleOffset := GranuleToSeconds(lastGranule)
+	startGranule := lastGranule
 
 	for {
 		select {
@@ -250,7 +131,7 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 		default:
 		}
 
-		page, err := reader.ReadPage()
+		pageData, pageHeader, err := ogg.ParseNextPage()
 		if err == io.EOF {
 			return false
 		}
@@ -259,27 +140,40 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 			return false
 		}
 
-		if !b.write(page.Data) {
+		// Calculate sample duration from granule difference
+		sampleCount := pageHeader.GranulePosition - lastGranule
+		if sampleCount == 0 {
+			// Header pages have granule 0, skip timing for them
+			continue
+		}
+		sampleDuration := time.Duration(float64(sampleCount) / 48000.0 * float64(time.Second))
+
+		// Write the Opus sample to the shared track
+		if err := b.track.WriteSample(media.Sample{
+			Data:     pageData,
+			Duration: sampleDuration,
+		}); err != nil {
+			log.Printf("[broadcaster] WriteSample error: %v", err)
 			return false
 		}
 
-		if page.GranulePosition > 0 {
-			pageTime := GranuleToSeconds(page.GranulePosition) - granuleOffset
-			elapsed := time.Since(startTime).Seconds()
-			ahead := pageTime - elapsed
-			if ahead > 0.005 {
-				sleepTimer := time.NewTimer(time.Duration(ahead * float64(time.Second)))
-				select {
-				case <-sleepTimer.C:
-				case <-b.skipCh:
-					sleepTimer.Stop()
-					return true
-				case <-ctx.Done():
-					sleepTimer.Stop()
-					return false
-				}
+		lastGranule = pageHeader.GranulePosition
+
+		// Pace: sleep to maintain real-time playback
+		pageTimeSec := float64(pageHeader.GranulePosition-startGranule) / 48000.0
+		elapsed := time.Since(startTime).Seconds()
+		ahead := pageTimeSec - elapsed
+		if ahead > 0.005 {
+			sleepTimer := time.NewTimer(time.Duration(ahead * float64(time.Second)))
+			select {
+			case <-sleepTimer.C:
+			case <-b.skipCh:
+				sleepTimer.Stop()
+				return true
+			case <-ctx.Done():
+				sleepTimer.Stop()
+				return false
 			}
-			lastGranule = page.GranulePosition
 		}
 	}
 }
