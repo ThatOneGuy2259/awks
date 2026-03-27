@@ -33,7 +33,7 @@ LIMIT 1;
 
 -- name: InsertQueueItem :one
 INSERT INTO queue (youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, (SELECT COALESCE(MAX(position), 0) + 1 FROM queue WHERE status IN ('pending', 'playing')), $8)
+VALUES ($1, $2, $3, $4, $5, $6, $7, nextval('queue_position_seq'), $8)
 RETURNING *;
 
 -- name: UpdateQueueStatus :exec

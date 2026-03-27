@@ -34,7 +34,10 @@ export function useWebRTC() {
       pcRef.current = null;
     }
     connectedRef.current = false;
+    // Reset audio graph refs so setupAnalyser rebuilds with the new stream
     analyserRef.current = null;
+    filtersRef.current = [];
+    gainNodeRef.current = null;
 
     console.log('[webrtc] creating peer connection...');
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
@@ -55,8 +58,15 @@ export function useWebRTC() {
       const setupAnalyser = () => {
         if (analyserRef.current) return;
         try {
-          const ctx = new AudioContext();
+          // Reuse existing AudioContext if available, otherwise create one
+          const ctx = audioCtxRef.current?.state !== 'closed'
+            ? audioCtxRef.current ?? new AudioContext()
+            : new AudioContext();
           audioCtxRef.current = ctx;
+
+          // Resume if suspended (e.g., autoplay policy)
+          if (ctx.state === 'suspended') ctx.resume();
+
           const source = ctx.createMediaStreamSource(stream);
 
           // Mute the <audio> element — we play through Web Audio instead
@@ -107,15 +117,14 @@ export function useWebRTC() {
         }
       };
 
-      // Try immediately, defer to click if suspended
-      const testCtx = new AudioContext();
-      if (testCtx.state === 'running') {
-        testCtx.close();
+      // Try immediately, defer to click if AudioContext would be suspended
+      const ctx = audioCtxRef.current ?? new AudioContext();
+      audioCtxRef.current = ctx;
+      if (ctx.state === 'running') {
         setupAnalyser();
       } else {
-        testCtx.close();
         const handler = () => {
-          setupAnalyser();
+          ctx.resume().then(() => setupAnalyser());
           document.removeEventListener('click', handler);
           document.removeEventListener('keydown', handler);
         };

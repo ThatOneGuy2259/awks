@@ -13,6 +13,7 @@ type Client struct {
 	Hub      *Hub
 	Conn     *websocket.Conn
 	Send     chan []byte
+	Done     chan struct{} // closed to signal WritePump to stop
 	UserID   string
 	Username string
 	Avatar   string
@@ -44,6 +45,13 @@ func (h *Hub) SetOnChange(fn func()) {
 	h.mu.Unlock()
 }
 
+func (h *Hub) removeClient(client *Client) {
+	if _, ok := h.clients[client]; ok {
+		delete(h.clients, client)
+		close(client.Done)
+	}
+}
+
 func (h *Hub) Run() {
 	for {
 		select {
@@ -56,25 +64,21 @@ func (h *Hub) Run() {
 			}
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.Send)
-			}
+			h.removeClient(client)
 			h.mu.Unlock()
 			if h.onChange != nil {
 				h.onChange()
 			}
 		case message := <-h.broadcast:
-			h.mu.RLock()
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.Send <- message:
 				default:
-					close(client.Send)
-					delete(h.clients, client)
+					h.removeClient(client)
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 		}
 	}
 }
@@ -146,8 +150,16 @@ func (h *Hub) ListenerCount() int {
 
 func (c *Client) WritePump() {
 	defer c.Conn.Close()
-	for msg := range c.Send {
-		if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+	for {
+		select {
+		case msg, ok := <-c.Send:
+			if !ok {
+				return
+			}
+			if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				return
+			}
+		case <-c.Done:
 			return
 		}
 	}

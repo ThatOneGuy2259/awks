@@ -16,6 +16,8 @@ type suggestCacheEntry struct {
 	expiresAt   time.Time
 }
 
+const maxSuggestCacheSize = 1000
+
 type SuggestHandler struct {
 	mu    sync.RWMutex
 	cache map[string]suggestCacheEntry
@@ -24,6 +26,16 @@ type SuggestHandler struct {
 func NewSuggestHandler() *SuggestHandler {
 	return &SuggestHandler{
 		cache: make(map[string]suggestCacheEntry),
+	}
+}
+
+// evictExpired removes expired entries. Called under write lock when cache is full.
+func (h *SuggestHandler) evictExpired() {
+	now := time.Now()
+	for k, v := range h.cache {
+		if now.After(v.expiresAt) {
+			delete(h.cache, k)
+		}
 	}
 }
 
@@ -47,6 +59,9 @@ func (h *SuggestHandler) Suggest(w http.ResponseWriter, r *http.Request) {
 	suggestions := fetchYouTubeSuggestions(query)
 
 	h.mu.Lock()
+	if len(h.cache) >= maxSuggestCacheSize {
+		h.evictExpired()
+	}
 	h.cache[key] = suggestCacheEntry{
 		suggestions: suggestions,
 		expiresAt:   time.Now().Add(5 * time.Minute),

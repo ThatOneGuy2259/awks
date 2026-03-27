@@ -89,6 +89,7 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		Hub:      h.hub,
 		Conn:     conn,
 		Send:     make(chan []byte, 256),
+		Done:     make(chan struct{}),
 		UserID:   userID,
 		Username: username,
 		Avatar:   avatar,
