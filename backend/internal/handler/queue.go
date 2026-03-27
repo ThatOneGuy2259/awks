@@ -117,8 +117,9 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if meta.DurationSec > maxTrackDuration {
-		http.Error(w, fmt.Sprintf("video exceeds maximum duration of %d seconds", maxTrackDuration), http.StatusBadRequest)
+	maxDur := getMaxDuration(h.queries, r)
+	if meta.DurationSec > maxDur {
+		http.Error(w, fmt.Sprintf("video exceeds maximum duration of %d seconds", maxDur), http.StatusBadRequest)
 		return
 	}
 

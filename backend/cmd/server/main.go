@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -165,11 +166,36 @@ func main() {
 			return false
 		}
 		// Pick next track from shuffle bag
-		videoID, filePath, title, artist, duration, ok := autoDJBag.Pick()
-		if !ok {
-			log.Printf("[auto-dj] no tracks available on disk")
+		// Read max duration setting
+		maxDurStr, _ := queries.GetSetting(ctx, "max_track_duration")
+		maxDur := 600
+		if n, err := strconv.Atoi(maxDurStr); err == nil && n > 0 {
+			maxDur = n
+		}
+
+		// Try up to 5 times to find a track within the duration limit
+		var videoID, filePath, title, artist string
+		var duration int
+		found := false
+		for attempt := 0; attempt < 5; attempt++ {
+			vid, fp, t, a, d, ok := autoDJBag.Pick()
+			if !ok {
+				log.Printf("[auto-dj] no tracks available on disk")
+				return false
+			}
+			if d > 0 && d > maxDur {
+				log.Printf("[auto-dj] skipping %s (%ds > %ds max)", t, d, maxDur)
+				continue
+			}
+			videoID, filePath, title, artist, duration = vid, fp, t, a, d
+			found = true
+			break
+		}
+		if !found {
+			log.Printf("[auto-dj] could not find a track within duration limit after 5 attempts")
 			return false
 		}
+
 		log.Printf("[auto-dj] picked: videoID=%s file=%s title=%s", videoID, filePath, title)
 		// Verify file exists
 		if _, statErr := os.Stat(filePath); statErr != nil {
@@ -259,7 +285,7 @@ func main() {
 	adminH := handler.NewAdminHandler(queries, playbackSvc, hub)
 	wsH := handler.NewWSHandler(hub, peerManager)
 	historyH := handler.NewHistoryHandler(queries)
-	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath)
+	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath, queries)
 	suggestH := handler.NewSuggestHandler()
 	trendingH := handler.NewTrendingHandler(pool)
 	listenerH := handler.NewListenerHandler(hub)

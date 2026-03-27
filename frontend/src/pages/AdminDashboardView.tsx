@@ -4,7 +4,6 @@ import { useListenerStore } from '../stores/listenerStore';
 import { AdminQueueItem } from '../components/admin/AdminQueueItem';
 import { SkipVotesRequiredControl, MaxTracksPerUserControl } from '../components/admin/SkipVotesRequiredControl';
 import { UserTimeoutModal } from '../components/admin/UserTimeoutModal';
-import { ActivityLog } from '../components/admin/ActivityLog';
 import { api } from '../lib/api';
 
 export function AdminDashboardView() {
@@ -14,6 +13,7 @@ export function AdminDashboardView() {
   const [skipMode, setSkipMode] = useState('fixed');
   const [skipPercent, setSkipPercent] = useState(50);
   const [maxTracksPerUser, setMaxTracksPerUser] = useState(3);
+  const [maxTrackDuration, setMaxTrackDuration] = useState(600);
   const [autoDJEnabled, setAutoDJEnabled] = useState(false);
   const [autoDJTimeOverride, setAutoDJTimeOverride] = useState(false);
   const [timeoutTarget, setTimeoutTarget] = useState<{ id: string; username: string } | null>(null);
@@ -27,6 +27,7 @@ export function AdminDashboardView() {
       if (settings.skip_mode) setSkipMode(settings.skip_mode);
       if (settings.skip_percent) setSkipPercent(Number(settings.skip_percent));
       if (settings.max_tracks_per_user) setMaxTracksPerUser(Number(settings.max_tracks_per_user));
+      if (settings.max_track_duration) setMaxTrackDuration(Number(settings.max_track_duration));
       if (settings.auto_dj_enabled) setAutoDJEnabled(settings.auto_dj_enabled === 'true');
       if (settings.auto_dj_time_override) setAutoDJTimeOverride(settings.auto_dj_time_override === 'true');
     }).catch(() => {});
@@ -107,6 +108,34 @@ export function AdminDashboardView() {
                 onChange={(v) => { setMaxTracksPerUser(v); updateSetting('max_tracks_per_user', String(v)); }}
               />
 
+              {/* Max Track Duration */}
+              <div className="pt-4 border-t border-outline-variant/10">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <h4 className="font-medium text-on-surface text-sm">Max Track Duration</h4>
+                    <p className="text-xs text-on-surface-variant mt-0.5">Maximum length for requested songs (seconds)</p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <input
+                      type="number"
+                      min="60"
+                      max="3600"
+                      step="60"
+                      value={maxTrackDuration}
+                      onChange={(e) => {
+                        const v = Math.max(60, Math.min(3600, Number(e.target.value)));
+                        setMaxTrackDuration(v);
+                        updateSetting('max_track_duration', String(v));
+                      }}
+                      className="w-20 bg-surface-container-low text-on-surface rounded-lg px-3 py-1.5 text-sm border border-transparent focus:border-primary/30 focus:outline-none text-center"
+                    />
+                    <span className="text-xs text-on-surface-variant">
+                      ({Math.floor(maxTrackDuration / 60)}:{String(maxTrackDuration % 60).padStart(2, '0')})
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Auto-DJ Toggle */}
               <div className="pt-4 border-t border-outline-variant/10 space-y-3">
                 <div className="flex items-center justify-between gap-4">
@@ -133,7 +162,6 @@ export function AdminDashboardView() {
                   <div className="flex items-center justify-between gap-4 pl-4">
                     <div className="min-w-0">
                       <h4 className="font-medium text-on-surface text-sm">Ignore Time Window</h4>
-                      <p className="text-xs text-on-surface-variant mt-0.5">Play Auto-DJ anytime, not just weekdays 7:30am-4pm</p>
                     </div>
                     <button
                       onClick={() => {
@@ -190,9 +218,6 @@ export function AdminDashboardView() {
           </div>
         </aside>
       </div>
-
-      {/* Activity Logs */}
-      <ActivityLog />
 
       {/* Timeout Modal */}
       {timeoutTarget && (

@@ -2,25 +2,38 @@ package handler
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/mccann/awks3/backend/internal/service"
+	"github.com/mccann/awks3/backend/internal/store"
 )
 
-const maxTrackDuration = 600 // seconds (10 minutes)
+const defaultMaxTrackDuration = 600 // seconds (10 minutes)
+
+// getMaxDuration reads the admin-configured max_track_duration setting, falling back to default.
+func getMaxDuration(queries store.Querier, r *http.Request) int {
+	if val, err := queries.GetSetting(r.Context(), "max_track_duration"); err == nil {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			return n
+		}
+	}
+	return defaultMaxTrackDuration
+}
 
 type SearchHandler struct {
 	apiKey    string
 	ytdlpPath string
+	queries   store.Querier
 }
 
-func NewSearchHandler(apiKey, ytdlpPath string) *SearchHandler {
-	return &SearchHandler{apiKey: apiKey, ytdlpPath: ytdlpPath}
+func NewSearchHandler(apiKey, ytdlpPath string, queries store.Querier) *SearchHandler {
+	return &SearchHandler{apiKey: apiKey, ytdlpPath: ytdlpPath, queries: queries}
 }
 
-func filterByDuration(results []service.SearchResult) []service.SearchResult {
+func filterByDuration(results []service.SearchResult, maxDuration int) []service.SearchResult {
 	filtered := make([]service.SearchResult, 0, len(results))
 	for _, r := range results {
-		if r.DurationSec == 0 || r.DurationSec <= maxTrackDuration {
+		if r.DurationSec == 0 || r.DurationSec <= maxDuration {
 			filtered = append(filtered, r)
 		}
 	}
@@ -33,6 +46,8 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "query parameter 'q' is required", http.StatusBadRequest)
 		return
 	}
+
+	maxDur := getMaxDuration(h.queries, r)
 
 	videoID, err := service.ExtractVideoID(query)
 	if err == nil {
@@ -47,7 +62,7 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 			Artist:       meta.Artist,
 			DurationSec:  meta.DurationSec,
 			ThumbnailURL: meta.ThumbnailURL,
-		}}))
+		}}, maxDur))
 		return
 	}
 
@@ -59,5 +74,5 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	writeJSON(w, filterByDuration(results))
+	writeJSON(w, filterByDuration(results, maxDur))
 }
