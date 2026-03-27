@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { themes, useThemeStore, applyTheme, type ThemeDefinition } from '../../stores/themeStore';
-import { useCustomThemeStore, getAllThemes } from '../../stores/customThemeStore';
+import { useCustomThemeStore } from '../../stores/customThemeStore';
 import { ThemeCreator } from './ThemeCreator';
 import type { CustomThemeInput } from '../../lib/colorUtils';
 
