@@ -38,6 +38,9 @@ export const api = {
     request<HistoryEntry[]>(`/api/history?limit=${limit}&offset=${offset}`),
   getListeners: () => request<ListenersResponse>('/api/listeners'),
   search: (q: string) => request<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`),
+  suggest: (q: string, signal?: AbortSignal) =>
+    request<string[]>(`/api/suggest?q=${encodeURIComponent(q)}`, { signal }),
+  trendingTags: () => request<{ tags: string[] }>('/api/trending-tags'),
 
   // Admin
   getSettings: () => request<Record<string, string>>('/api/settings'),
