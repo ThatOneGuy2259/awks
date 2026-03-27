@@ -85,6 +85,7 @@ export interface QueueTrack {
   requester_avatar: string;
   position: number;
   status: string;
+  audio_status: string;
   created_at: string;
 }
 
@@ -97,6 +98,8 @@ export interface PlaybackState {
   started_at: string;
   duration_sec: number;
   requested_by: string;
+  requester_name: string;
+  requester_avatar: string;
   playing?: boolean;
 }
 

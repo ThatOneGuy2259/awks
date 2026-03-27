@@ -18,21 +18,23 @@ import (
 
 // Extractor handles yt-dlp audio extraction for queued tracks.
 type Extractor struct {
-	ytdlpPath  string
-	cacheDir   string
-	queries    store.Querier
-	onReady    func() // called when a track finishes extracting
-	mu         sync.Mutex
-	inProgress map[string]bool // queue ID -> extracting
+	ytdlpPath      string
+	cacheDir       string
+	queries        store.Querier
+	onReady        func() // called when a track finishes extracting
+	onStatusChange func() // called whenever audio_status changes (for WS broadcast)
+	mu             sync.Mutex
+	inProgress     map[string]bool // queue ID -> extracting
 }
 
-func NewExtractor(ytdlpPath, cacheDir string, queries store.Querier, onReady func()) *Extractor {
+func NewExtractor(ytdlpPath, cacheDir string, queries store.Querier, onReady func(), onStatusChange func()) *Extractor {
 	return &Extractor{
-		ytdlpPath:  ytdlpPath,
-		cacheDir:   cacheDir,
-		queries:    queries,
-		onReady:    onReady,
-		inProgress: make(map[string]bool),
+		ytdlpPath:      ytdlpPath,
+		cacheDir:       cacheDir,
+		queries:        queries,
+		onReady:        onReady,
+		onStatusChange: onStatusChange,
+		inProgress:     make(map[string]bool),
 	}
 }
 
@@ -64,6 +66,9 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 			AudioStatus: "extracting",
 			AudioPath:   pgtype.Text{},
 		})
+		if e.onStatusChange != nil {
+			e.onStatusChange()
+		}
 
 		// Run yt-dlp to download best available audio
 		tmpBase := filepath.Join(e.cacheDir, idStr+"-tmp")
@@ -83,6 +88,9 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 				AudioStatus: "failed",
 				AudioPath:   pgtype.Text{},
 			})
+			if e.onStatusChange != nil {
+				e.onStatusChange()
+			}
 			return
 		}
 
@@ -95,6 +103,9 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 				AudioStatus: "failed",
 				AudioPath:   pgtype.Text{},
 			})
+			if e.onStatusChange != nil {
+				e.onStatusChange()
+			}
 			return
 		}
 		tmpPath := matches[0]
@@ -114,6 +125,9 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 				AudioStatus: "failed",
 				AudioPath:   pgtype.Text{},
 			})
+			if e.onStatusChange != nil {
+				e.onStatusChange()
+			}
 			return
 		}
 
@@ -136,6 +150,9 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 			AudioStatus: "ready",
 			AudioPath:   pgtype.Text{String: outputPath, Valid: true},
 		})
+		if e.onStatusChange != nil {
+			e.onStatusChange()
+		}
 
 		if e.onReady != nil {
 			e.onReady()

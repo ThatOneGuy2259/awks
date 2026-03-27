@@ -43,6 +43,16 @@ export function MusicQueueView() {
                   </h2>
                   <p className="text-xl md:text-2xl text-primary font-medium">{track.artist}</p>
                 </div>
+                {track.requesterName && (
+                  <div className="flex items-center gap-2">
+                    {track.requesterAvatar && (
+                      <img className="w-5 h-5 rounded-full" src={track.requesterAvatar} alt={track.requesterName} />
+                    )}
+                    <span className="text-sm text-on-surface-variant">
+                      Requested by <span className="text-on-surface font-medium">{track.requesterName}</span>
+                    </span>
+                  </div>
+                )}
                 <ReactionBar />
               </div>
             </div>

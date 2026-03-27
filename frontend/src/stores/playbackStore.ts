@@ -8,6 +8,8 @@ interface PlaybackState {
     artist: string;
     thumbnail: string;
     requestedBy: string;
+    requesterName: string;
+    requesterAvatar: string;
     startedAt: string;
     durationSec: number;
   } | null;

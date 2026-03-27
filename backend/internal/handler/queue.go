@@ -50,6 +50,7 @@ func (h *QueueHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
 			RequesterAvatar: pgTextStr(row.RequesterAvatar),
 			Position:        int(row.Position),
 			Status:          row.Status,
+			AudioStatus:     row.AudioStatus,
 			CreatedAt:       row.CreatedAt.Time,
 		})
 	}

@@ -15,16 +15,27 @@ const WS_URL = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.
 let ws: WebSocket | null = null;
 
 type MessageCallback = (data: unknown) => void;
-const messageCallbacks: Map<string, MessageCallback> = new Map();
+const messageCallbacks: Map<string, Set<MessageCallback>> = new Map();
 
-/** Register a callback for a specific message type. Used by useWebRTC for signaling. */
+/** Register a callback for a specific message type. Multiple listeners supported. */
 export function onWsMessage(type: string, callback: MessageCallback) {
-  messageCallbacks.set(type, callback);
+  if (!messageCallbacks.has(type)) {
+    messageCallbacks.set(type, new Set());
+  }
+  messageCallbacks.get(type)!.add(callback);
 }
 
-/** Unregister a callback for a specific message type. */
-export function offWsMessage(type: string) {
-  messageCallbacks.delete(type);
+/** Unregister a specific callback for a message type. */
+export function offWsMessage(type: string, callback?: MessageCallback) {
+  if (!callback) {
+    messageCallbacks.delete(type);
+  } else {
+    const set = messageCallbacks.get(type);
+    if (set) {
+      set.delete(callback);
+      if (set.size === 0) messageCallbacks.delete(type);
+    }
+  }
 }
 
 function connectWs(userId: string, username: string, avatarUrl: string) {
@@ -51,6 +62,8 @@ function connectWs(userId: string, username: string, avatarUrl: string) {
           artist: state.artist,
           thumbnail: state.thumbnail_url,
           requestedBy: state.requested_by,
+          requesterName: state.requester_name || '',
+          requesterAvatar: state.requester_avatar || '',
           startedAt: state.started_at,
           durationSec: state.duration_sec,
         });
@@ -123,9 +136,9 @@ function handleMessage(msg: { type: string; data: unknown }) {
   const { type, data } = msg;
 
   // Dispatch to registered callbacks first
-  const cb = messageCallbacks.get(type);
-  if (cb) {
-    cb(data);
+  const cbs = messageCallbacks.get(type);
+  if (cbs && cbs.size > 0) {
+    cbs.forEach((cb) => cb(data));
     return;
   }
 
@@ -134,6 +147,7 @@ function handleMessage(msg: { type: string; data: unknown }) {
       const d = data as {
         queue_id: string; video_id: string; title: string; artist: string;
         started_at: string; duration_sec: number; requested_by: string;
+        requester_name?: string; requester_avatar?: string;
       };
       if (!d.video_id) {
         usePlaybackStore.getState().clear();
@@ -145,6 +159,8 @@ function handleMessage(msg: { type: string; data: unknown }) {
           artist: d.artist,
           thumbnail: `https://img.youtube.com/vi/${d.video_id}/hqdefault.jpg`,
           requestedBy: d.requested_by,
+          requesterName: d.requester_name || '',
+          requesterAvatar: d.requester_avatar || '',
           startedAt: d.started_at,
           durationSec: d.duration_sec,
         });

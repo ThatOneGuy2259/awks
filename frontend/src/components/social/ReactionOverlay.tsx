@@ -24,7 +24,7 @@ export function ReactionOverlay() {
 
   useEffect(() => {
     onWsMessage('REACTION', handleReaction);
-    return () => offWsMessage('REACTION');
+    return () => offWsMessage('REACTION', handleReaction);
   }, [handleReaction]);
 
   return (

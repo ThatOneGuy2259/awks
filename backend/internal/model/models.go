@@ -3,14 +3,16 @@ package model
 import "time"
 
 type PlaybackState struct {
-	QueueID    string    `json:"queue_id"`
-	VideoID    string    `json:"video_id"`
-	Title      string    `json:"title"`
-	Artist     string    `json:"artist"`
-	Thumbnail  string    `json:"thumbnail_url"`
-	StartedAt  time.Time `json:"started_at"`
-	DurationSec int      `json:"duration_sec"`
-	RequestedBy string   `json:"requested_by"`
+	QueueID        string    `json:"queue_id"`
+	VideoID        string    `json:"video_id"`
+	Title          string    `json:"title"`
+	Artist         string    `json:"artist"`
+	Thumbnail      string    `json:"thumbnail_url"`
+	StartedAt      time.Time `json:"started_at"`
+	DurationSec    int       `json:"duration_sec"`
+	RequestedBy    string    `json:"requested_by"`
+	RequesterName  string    `json:"requester_name"`
+	RequesterAvatar string   `json:"requester_avatar"`
 }
 
 type QueueTrack struct {
@@ -26,6 +28,7 @@ type QueueTrack struct {
 	RequesterAvatar string   `json:"requester_avatar"`
 	Position       int       `json:"position"`
 	Status         string    `json:"status"`
+	AudioStatus    string    `json:"audio_status"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -47,13 +50,15 @@ type WSMessage struct {
 }
 
 type TrackChangeData struct {
-	QueueID     string `json:"queue_id"`
-	VideoID     string `json:"video_id"`
-	Title       string `json:"title"`
-	Artist      string `json:"artist"`
-	StartedAt   string `json:"started_at"`
-	DurationSec int    `json:"duration_sec"`
-	RequestedBy string `json:"requested_by"`
+	QueueID        string `json:"queue_id"`
+	VideoID        string `json:"video_id"`
+	Title          string `json:"title"`
+	Artist         string `json:"artist"`
+	StartedAt      string `json:"started_at"`
+	DurationSec    int    `json:"duration_sec"`
+	RequestedBy    string `json:"requested_by"`
+	RequesterName  string `json:"requester_name"`
+	RequesterAvatar string `json:"requester_avatar"`
 }
 
 type SyncData struct {

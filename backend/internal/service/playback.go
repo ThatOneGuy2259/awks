@@ -88,28 +88,42 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 	})
 
 	now := time.Now().UTC()
+
+	// Look up requester name and avatar
+	var requesterName, requesterAvatar string
+	if user, err := s.queries.GetUser(ctx, next.RequestedBy); err == nil {
+		requesterName = user.Username
+		if user.AvatarUrl.Valid {
+			requesterAvatar = user.AvatarUrl.String
+		}
+	}
+
 	state := &model.PlaybackState{
-		QueueID:     next.ID.String(),
-		VideoID:     next.VideoID,
-		Title:       next.Title,
-		Artist:      pgTextToString(next.Artist),
-		Thumbnail:   pgTextToString(next.ThumbnailUrl),
-		StartedAt:   now,
-		DurationSec: int(next.DurationSec),
-		RequestedBy: next.RequestedBy,
+		QueueID:        next.ID.String(),
+		VideoID:        next.VideoID,
+		Title:          next.Title,
+		Artist:         pgTextToString(next.Artist),
+		Thumbnail:      pgTextToString(next.ThumbnailUrl),
+		StartedAt:      now,
+		DurationSec:    int(next.DurationSec),
+		RequestedBy:    next.RequestedBy,
+		RequesterName:  requesterName,
+		RequesterAvatar: requesterAvatar,
 	}
 	s.redis.SetPlaybackState(ctx, state)
 
 	s.wsbroadcast(model.WSMessage{
 		Type: "TRACK_CHANGE",
 		Data: model.TrackChangeData{
-			QueueID:     state.QueueID,
-			VideoID:     state.VideoID,
-			Title:       state.Title,
-			Artist:      state.Artist,
-			StartedAt:   now.Format(time.RFC3339),
-			DurationSec: state.DurationSec,
-			RequestedBy: state.RequestedBy,
+			QueueID:        state.QueueID,
+			VideoID:        state.VideoID,
+			Title:          state.Title,
+			Artist:         state.Artist,
+			StartedAt:      now.Format(time.RFC3339),
+			DurationSec:    state.DurationSec,
+			RequestedBy:    state.RequestedBy,
+			RequesterName:  state.RequesterName,
+			RequesterAvatar: state.RequesterAvatar,
 		},
 	})
 

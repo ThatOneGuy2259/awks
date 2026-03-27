@@ -112,6 +112,8 @@ func main() {
 		if state == nil {
 			go playbackSvc.AdvanceQueue(context.Background())
 		}
+	}, func() {
+		hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
 	})
 
 	// Startup: clean orphan audio files and re-extract pending tracks

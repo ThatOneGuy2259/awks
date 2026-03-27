@@ -44,10 +44,34 @@ export function QueueItem({ track, index }: QueueItemProps) {
           Requested by <span className="text-on-surface">{track.requester_name}</span>
         </span>
       </div>
+      {/* Audio status indicator */}
+      {track.audio_status !== 'ready' && (
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+          track.audio_status === 'failed'
+            ? 'bg-red-500/10 text-red-400'
+            : 'bg-primary/10 text-primary'
+        }`}>
+          {track.audio_status === 'extracting' && (
+            <>
+              <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+              <span>Downloading</span>
+            </>
+          )}
+          {track.audio_status === 'pending' && (
+            <>
+              <span className="material-symbols-outlined text-xs">hourglass_top</span>
+              <span>Waiting</span>
+            </>
+          )}
+          {track.audio_status === 'failed' && (
+            <>
+              <span className="material-symbols-outlined text-xs">error</span>
+              <span>Failed</span>
+            </>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-3">
-        <button className="p-2 text-on-surface-variant hover:text-secondary transition-colors">
-          <span className="material-symbols-outlined">thumb_up</span>
-        </button>
         {isAdmin && (
           <button
             onClick={handleRemove}
