@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SearchInput } from '../components/search/SearchInput';
 import { TrackCard } from '../components/search/TrackCard';
 import { api, type SearchResult } from '../lib/api';
@@ -6,13 +6,26 @@ import { useQueueStore } from '../stores/queueStore';
 import { useUserStore } from '../stores/userStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
-const trendingSuggestions = ['Phonk', 'Midnight Lo-fi', 'Cyberpunk 2077', 'Hyperpop', 'Synthwave', 'Chillhop'];
+const fallbackTags = ['Phonk', 'Midnight Lo-fi', 'Cyberpunk 2077', 'Hyperpop', 'Synthwave', 'Chillhop'];
 
 export function SearchRequestView() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [trendingTags, setTrendingTags] = useState<string[]>(fallbackTags);
+
+  useEffect(() => {
+    api.trendingTags()
+      .then((data) => {
+        if (data.tags && data.tags.length > 0) {
+          setTrendingTags(data.tags);
+        }
+      })
+      .catch(() => {
+        // Keep fallback tags
+      });
+  }, []);
 
   const tracks = useQueueStore((s) => s.tracks);
   const userId = useUserStore((s) => s.id);
@@ -44,7 +57,7 @@ export function SearchRequestView() {
     <div className="min-h-screen pt-4 pb-32 px-6 lg:px-24">
       {/* Search Input */}
       <div className="max-w-4xl mx-auto mb-16">
-        <SearchInput value={query} onChange={setQuery} onSubmit={() => handleSearch()} />
+        <SearchInput value={query} onChange={setQuery} onSubmit={handleSearch} />
 
         {/* Queue Slot Counter */}
         <div className="mt-4 flex items-center gap-2">
@@ -67,7 +80,7 @@ export function SearchRequestView() {
           <span className="text-sm font-semibold uppercase tracking-widest text-on-surface-variant mr-2 font-label">
             Trending
           </span>
-          {trendingSuggestions.map((tag) => (
+          {trendingTags.map((tag) => (
             <button
               key={tag}
               onClick={() => {
