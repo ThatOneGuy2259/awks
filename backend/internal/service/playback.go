@@ -19,6 +19,7 @@ type PlaybackService struct {
 	redis       *redisclient.Client
 	wsbroadcast func(msg model.WSMessage)
 	broadcaster *audio.Broadcaster
+	preloadNext func(ctx context.Context) // called after advancing to preload the next track
 	mu          sync.Mutex
 }
 
@@ -29,6 +30,11 @@ func NewPlaybackService(q store.Querier, r *redisclient.Client, wsbroadcast func
 		wsbroadcast: wsbroadcast,
 		broadcaster: broadcaster,
 	}
+}
+
+// SetPreloadNext sets the callback to preload the next track after advancing.
+func (s *PlaybackService) SetPreloadNext(fn func(ctx context.Context)) {
+	s.preloadNext = fn
 }
 
 func (s *PlaybackService) GetCurrentState(ctx context.Context) (*model.PlaybackState, error) {
@@ -129,6 +135,11 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 
 	// Wake the broadcaster — it will pick up the new track
 	s.broadcaster.Wake()
+
+	// Preload the next track in queue so it's ready when this one finishes
+	if s.preloadNext != nil {
+		go s.preloadNext(ctx)
+	}
 }
 
 func (s *PlaybackService) SkipCurrent(ctx context.Context, reason string) {

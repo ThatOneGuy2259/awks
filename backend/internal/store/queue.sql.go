@@ -149,6 +149,27 @@ func (q *Queries) GetNextPending(ctx context.Context) (GetNextPendingRow, error)
 	return i, err
 }
 
+const getNextPendingExtraction = `-- name: GetNextPendingExtraction :one
+SELECT id, youtube_url, video_id
+FROM queue
+WHERE status = 'pending' AND audio_status = 'pending'
+ORDER BY position ASC
+LIMIT 1
+`
+
+type GetNextPendingExtractionRow struct {
+	ID         pgtype.UUID `json:"id"`
+	YoutubeUrl string      `json:"youtube_url"`
+	VideoID    string      `json:"video_id"`
+}
+
+func (q *Queries) GetNextPendingExtraction(ctx context.Context) (GetNextPendingExtractionRow, error) {
+	row := q.db.QueryRow(ctx, getNextPendingExtraction)
+	var i GetNextPendingExtractionRow
+	err := row.Scan(&i.ID, &i.YoutubeUrl, &i.VideoID)
+	return i, err
+}
+
 const getNextReadyPending = `-- name: GetNextReadyPending :one
 SELECT id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url,
        requested_by, position, status, created_at, audio_status, audio_path

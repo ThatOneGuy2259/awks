@@ -122,6 +122,16 @@ func main() {
 		hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
 	})
 
+	// Wire up next-track preloading
+	playbackSvc.SetPreloadNext(func(ctx context.Context) {
+		next, err := queries.GetNextPendingExtraction(ctx)
+		if err != nil {
+			return // no pending tracks to preload
+		}
+		log.Printf("[preload] starting extraction for next track: %s", next.VideoID)
+		extractor.Extract(next.ID, next.YoutubeUrl)
+	})
+
 	// Startup: clean orphan audio files and re-extract pending tracks
 	extractor.CleanupOrphans(context.Background())
 	extractor.ExtractPending(context.Background())

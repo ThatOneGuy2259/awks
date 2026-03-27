@@ -6,6 +6,7 @@ import { useSkipVoteStore } from '../stores/skipVoteStore';
 import { useListenerStore } from '../stores/listenerStore';
 import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useConnectionStore } from '../stores/connectionStore';
 import { api } from '../lib/api';
 
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -44,12 +45,14 @@ function connectWs(token: string) {
   // Prevent duplicate connections
   if (ws && ws.readyState <= WebSocket.OPEN) return;
 
+  useConnectionStore.getState().setStatus('connecting');
   const params = new URLSearchParams({ token });
   const socket = new WebSocket(`${WS_URL}?${params.toString()}`);
   ws = socket;
 
   socket.onopen = () => {
     console.log('[WS] connected');
+    useConnectionStore.getState().setStatus('connected');
     // Flush any messages queued before the socket was ready
     for (const msg of pendingMessages) {
       socket.send(msg);
@@ -100,6 +103,7 @@ function connectWs(token: string) {
   socket.onclose = () => {
     console.log('[WS] disconnected, reconnecting...');
     ws = null;
+    useConnectionStore.getState().setStatus('disconnected');
     // Get a fresh token on reconnect (Clerk tokens are short-lived)
     setTimeout(() => {
       if (getTokenFn) {

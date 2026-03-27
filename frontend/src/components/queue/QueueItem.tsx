@@ -1,6 +1,7 @@
 import type { QueueTrack } from '../../lib/api';
 import { api } from '../../lib/api';
 import { useUserStore } from '../../stores/userStore';
+import { formatTime } from '../../lib/formatTime';
 
 interface QueueItemProps {
   track: QueueTrack;
@@ -34,7 +35,12 @@ export function QueueItem({ track, index }: QueueItemProps) {
         <h4 className="font-bold text-on-surface truncate group-hover:text-primary transition-colors">
           {track.title}
         </h4>
-        <p className="text-on-surface-variant text-sm truncate">{track.artist}</p>
+        <p className="text-on-surface-variant text-sm truncate">
+          {track.artist}
+          {track.duration_sec > 0 && (
+            <span className="ml-2 text-on-surface-variant/50">{formatTime(track.duration_sec)}</span>
+          )}
+        </p>
       </div>
       <div className="hidden md:flex items-center gap-2 text-on-surface-variant text-xs font-medium px-4">
         {track.requester_avatar && (

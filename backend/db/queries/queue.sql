@@ -69,6 +69,13 @@ WHERE status = 'pending' AND audio_status = 'ready'
 ORDER BY position ASC
 LIMIT 1;
 
+-- name: GetNextPendingExtraction :one
+SELECT id, youtube_url, video_id
+FROM queue
+WHERE status = 'pending' AND audio_status = 'pending'
+ORDER BY position ASC
+LIMIT 1;
+
 -- name: GetActiveQueueIDs :many
 SELECT id FROM queue WHERE status IN ('pending', 'playing');
 

@@ -26,6 +26,7 @@ type Querier interface {
 	GetCurrentlyPlaying(ctx context.Context) (GetCurrentlyPlayingRow, error)
 	GetHistory(ctx context.Context, arg GetHistoryParams) ([]GetHistoryRow, error)
 	GetNextPending(ctx context.Context) (GetNextPendingRow, error)
+	GetNextPendingExtraction(ctx context.Context) (GetNextPendingExtractionRow, error)
 	GetNextReadyPending(ctx context.Context) (Queue, error)
 	GetPendingExtractions(ctx context.Context) ([]GetPendingExtractionsRow, error)
 	GetQueue(ctx context.Context) ([]GetQueueRow, error)

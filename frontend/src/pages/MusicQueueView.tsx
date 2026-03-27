@@ -5,6 +5,7 @@ import { LiveChat } from '../components/social/LiveChat';
 import { wsSend } from '../hooks/useWebSocket';
 import { ReactionBar } from '../components/social/ReactionBar';
 import { ReactionOverlay } from '../components/social/ReactionOverlay';
+import { formatTime } from '../lib/formatTime';
 
 export function MusicQueueView() {
   const track = usePlaybackStore((s) => s.currentTrack);
@@ -41,7 +42,12 @@ export function MusicQueueView() {
                   <h2 className="text-4xl md:text-6xl font-black font-headline tracking-tighter text-on-surface">
                     {track.title}
                   </h2>
-                  <p className="text-xl md:text-2xl text-primary font-medium">{track.artist}</p>
+                  <p className="text-xl md:text-2xl text-primary font-medium">
+                    {track.artist}
+                    {track.durationSec > 0 && (
+                      <span className="text-on-surface-variant text-sm ml-3">{formatTime(track.durationSec)}</span>
+                    )}
+                  </p>
                 </div>
                 {track.requesterName && (
                   <div className="flex items-center gap-2">

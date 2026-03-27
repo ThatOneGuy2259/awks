@@ -17,6 +17,7 @@ import { useThemeStore, applyTheme } from './stores/themeStore';
 import { getAllThemes } from './stores/customThemeStore';
 import { AwksLogo } from './components/AwksLogo';
 import { ToastContainer } from './components/ToastContainer';
+import { ConnectionBanner } from './components/ConnectionBanner';
 
 // Apply saved theme on module load (before React renders)
 const startupThemeId = useThemeStore.getState().currentTheme;
@@ -62,6 +63,7 @@ function AppContent() {
     <>
       <TopBar />
       <Sidebar listening={listening} />
+      <ConnectionBanner />
 
       <main className="lg:pl-64 pt-20 pb-32 min-h-screen">
         <Routes>
