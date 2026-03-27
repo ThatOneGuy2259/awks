@@ -162,6 +162,8 @@ func main() {
 	wsH := handler.NewWSHandler(hub, peerManager)
 	historyH := handler.NewHistoryHandler(queries)
 	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath)
+	suggestH := handler.NewSuggestHandler()
+	trendingH := handler.NewTrendingHandler(pool)
 	listenerH := handler.NewListenerHandler(hub)
 	meH := handler.NewMeHandler(queries)
 
@@ -192,6 +194,8 @@ func main() {
 		r.Get("/history", historyH.GetHistory)
 		r.Get("/listeners", listenerH.GetListeners)
 		r.Get("/search", searchH.Search)
+		r.Get("/suggest", suggestH.Suggest)
+		r.Get("/trending-tags", trendingH.GetTrendingTags)
 		r.Post("/me", meH.SyncMe)
 		r.Get("/settings", adminH.GetSettings)
 
