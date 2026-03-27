@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"sync"
 	"net/http"
 	"os"
 	"os/exec"
@@ -19,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/auth"
+	"github.com/mccann/awks3/backend/internal/autodj"
 	"github.com/mccann/awks3/backend/internal/config"
 	"github.com/mccann/awks3/backend/internal/handler"
 	"github.com/mccann/awks3/backend/internal/model"
@@ -66,6 +69,9 @@ func main() {
 	}
 	if _, err := pool.Exec(context.Background(), readMigration("006_history_index.up.sql")); err != nil {
 		log.Printf("migration 006 warning: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), readMigration("007_auto_dj.up.sql")); err != nil {
+		log.Printf("migration 007 warning: %v", err)
 	}
 
 	// Clean up expired timeouts
@@ -132,6 +138,67 @@ func main() {
 		extractor.Extract(next.ID, next.YoutubeUrl)
 	})
 
+	// Wire up auto-DJ
+	autodj.EnsureSystemUser(context.Background(), queries)
+	autoDJCacheDir := filepath.Join(filepath.Dir(cfg.AudioCacheDir), "auto-dj-cache")
+	var autoDJMu sync.Mutex
+	playbackSvc.SetAutoDJQueue(func(ctx context.Context) bool {
+		// Prevent concurrent auto-DJ inserts
+		if !autoDJMu.TryLock() {
+			return false
+		}
+		defer autoDJMu.Unlock()
+		// Check admin toggle
+		enabled, _ := queries.GetSetting(ctx, "auto_dj_enabled")
+		if enabled != "true" {
+			return false
+		}
+		// Check time window (with override option)
+		timeOverride, _ := queries.GetSetting(ctx, "auto_dj_time_override")
+		if !autodj.IsAutoDJTime(timeOverride) {
+			return false
+		}
+		// Don't queue if there's already a pending/playing auto-DJ track
+		djCount, _ := queries.CountPendingAutoDJ(ctx)
+		if djCount > 0 {
+			return false
+		}
+		// Pick a random track from disk
+		videoID, filePath, title, artist, duration, ok := autodj.PickRandomTrack(autoDJCacheDir)
+		if !ok {
+			log.Printf("[auto-dj] no tracks available on disk")
+			return false
+		}
+		log.Printf("[auto-dj] picked: videoID=%s file=%s title=%s", videoID, filePath, title)
+		// Verify file exists
+		if _, statErr := os.Stat(filePath); statErr != nil {
+			log.Printf("[auto-dj] file not found: %s", filePath)
+			return false
+		}
+		// Insert into queue with audio_status=ready and audio_path in one query
+		_, err := pool.Exec(ctx,
+			`INSERT INTO queue (youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status, audio_path)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, nextval('queue_position_seq'), 'ready', $8)`,
+			fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID),
+			videoID, title, artist, duration,
+			fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", videoID),
+			"auto-dj", filePath,
+		)
+		if err != nil {
+			log.Printf("[auto-dj] failed to insert queue item: %v", err)
+			return false
+		}
+		log.Printf("[auto-dj] queued: %s - %s", title, artist)
+		hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+		return true
+	})
+
+	// Sync auto-DJ playlist and backfill metadata in background
+	go func() {
+		autodj.SyncPlaylist(context.Background(), cfg.YtdlpPath, autoDJCacheDir)
+		autodj.BackfillMetadata(context.Background(), cfg.YtdlpPath, autoDJCacheDir)
+	}()
+
 	// Startup: clean orphan audio files and re-extract pending tracks
 	extractor.CleanupOrphans(context.Background())
 	extractor.ExtractPending(context.Background())
@@ -151,7 +218,7 @@ func main() {
 		var offset float64
 		if state != nil {
 			elapsed := time.Since(state.StartedAt).Seconds()
-			if elapsed >= float64(state.DurationSec) {
+			if state.DurationSec > 0 && elapsed >= float64(state.DurationSec) {
 				// Track expired by time — advance the queue
 				go playbackSvc.AdvanceQueue(context.Background())
 				return "", 0, nil

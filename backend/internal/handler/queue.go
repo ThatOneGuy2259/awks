@@ -137,6 +137,9 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Remove any pending auto-DJ tracks so user's track takes priority
+	h.queries.DeletePendingAutoDJ(ctx)
+
 	// Start audio extraction
 	h.extractor.Extract(item.ID, body.YouTubeURL)
 

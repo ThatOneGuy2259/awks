@@ -43,12 +43,20 @@ export function QueueItem({ track, index }: QueueItemProps) {
         </p>
       </div>
       <div className="hidden md:flex items-center gap-2 text-on-surface-variant text-xs font-medium px-4">
-        {track.requester_avatar && (
-          <img className="w-6 h-6 rounded-full" src={track.requester_avatar} alt={track.requester_name} />
+        {track.requested_by === 'auto-dj' ? (
+          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-wider">
+            Auto-DJ
+          </span>
+        ) : (
+          <>
+            {track.requester_avatar && (
+              <img className="w-6 h-6 rounded-full" src={track.requester_avatar} alt={track.requester_name} />
+            )}
+            <span>
+              Requested by <span className="text-on-surface">{track.requester_name}</span>
+            </span>
+          </>
         )}
-        <span>
-          Requested by <span className="text-on-surface">{track.requester_name}</span>
-        </span>
       </div>
       {/* Audio status indicator */}
       {track.audio_status !== 'ready' && (

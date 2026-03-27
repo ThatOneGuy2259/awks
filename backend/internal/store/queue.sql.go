@@ -11,6 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countPendingAutoDJ = `-- name: CountPendingAutoDJ :one
+SELECT COUNT(*) FROM queue WHERE requested_by = 'auto-dj' AND status IN ('pending', 'playing')
+`
+
+func (q *Queries) CountPendingAutoDJ(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countPendingAutoDJ)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUserPendingTracks = `-- name: CountUserPendingTracks :one
 SELECT COUNT(*) FROM queue WHERE requested_by = $1 AND status IN ('pending', 'playing')
 `
@@ -20,6 +31,15 @@ func (q *Queries) CountUserPendingTracks(ctx context.Context, requestedBy string
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deletePendingAutoDJ = `-- name: DeletePendingAutoDJ :exec
+DELETE FROM queue WHERE requested_by = 'auto-dj' AND status = 'pending'
+`
+
+func (q *Queries) DeletePendingAutoDJ(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, deletePendingAutoDJ)
+	return err
 }
 
 const deleteQueueItem = `-- name: DeleteQueueItem :exec

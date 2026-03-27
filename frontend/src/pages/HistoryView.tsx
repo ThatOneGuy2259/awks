@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import type { HistoryEntry } from '../lib/api';
 import { useUserStore } from '../stores/userStore';
@@ -152,21 +152,36 @@ export function HistoryView() {
             </div>
           ))}
 
+          {/* Infinite scroll sentinel */}
           {hasMore && (
-            <button
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="w-full py-3 text-sm text-on-surface-variant hover:text-primary transition-colors"
-            >
-              {loadingMore ? (
-                <span className="material-symbols-outlined text-base animate-spin">progress_activity</span>
-              ) : (
-                'Load more'
+            <div className="py-4 flex justify-center">
+              {loadingMore && (
+                <span className="material-symbols-outlined text-base text-primary animate-spin">progress_activity</span>
               )}
-            </button>
+              <InfiniteScrollSentinel onVisible={loadMore} />
+            </div>
           )}
         </div>
       )}
     </div>
   );
+}
+
+function InfiniteScrollSentinel({ onVisible }: { onVisible: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onVisibleRef = useRef(onVisible);
+  onVisibleRef.current = onVisible;
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) onVisibleRef.current(); },
+      { rootMargin: '200px' },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return <div ref={ref} />;
 }

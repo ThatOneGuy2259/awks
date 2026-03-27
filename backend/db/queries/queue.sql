@@ -79,5 +79,11 @@ LIMIT 1;
 -- name: GetActiveQueueIDs :many
 SELECT id FROM queue WHERE status IN ('pending', 'playing');
 
+-- name: DeletePendingAutoDJ :exec
+DELETE FROM queue WHERE requested_by = 'auto-dj' AND status = 'pending';
+
+-- name: CountPendingAutoDJ :one
+SELECT COUNT(*) FROM queue WHERE requested_by = 'auto-dj' AND status IN ('pending', 'playing');
+
 -- name: UpdateDuration :exec
 UPDATE queue SET duration_sec = $2 WHERE queue.id = $1;

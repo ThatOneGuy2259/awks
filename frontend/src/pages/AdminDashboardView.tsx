@@ -14,6 +14,8 @@ export function AdminDashboardView() {
   const [skipMode, setSkipMode] = useState('fixed');
   const [skipPercent, setSkipPercent] = useState(50);
   const [maxTracksPerUser, setMaxTracksPerUser] = useState(3);
+  const [autoDJEnabled, setAutoDJEnabled] = useState(false);
+  const [autoDJTimeOverride, setAutoDJTimeOverride] = useState(false);
   const [timeoutTarget, setTimeoutTarget] = useState<{ id: string; username: string } | null>(null);
 
   const playing = tracks.find((t) => t.status === 'playing');
@@ -25,6 +27,8 @@ export function AdminDashboardView() {
       if (settings.skip_mode) setSkipMode(settings.skip_mode);
       if (settings.skip_percent) setSkipPercent(Number(settings.skip_percent));
       if (settings.max_tracks_per_user) setMaxTracksPerUser(Number(settings.max_tracks_per_user));
+      if (settings.auto_dj_enabled) setAutoDJEnabled(settings.auto_dj_enabled === 'true');
+      if (settings.auto_dj_time_override) setAutoDJTimeOverride(settings.auto_dj_time_override === 'true');
     }).catch(() => {});
   }, []);
 
@@ -102,6 +106,52 @@ export function AdminDashboardView() {
                 value={maxTracksPerUser}
                 onChange={(v) => { setMaxTracksPerUser(v); updateSetting('max_tracks_per_user', String(v)); }}
               />
+
+              {/* Auto-DJ Toggle */}
+              <div className="pt-4 border-t border-outline-variant/10 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <h4 className="font-medium text-on-surface text-sm">Auto-DJ</h4>
+                    <p className="text-xs text-on-surface-variant mt-0.5">Plays background music when queue is empty (weekdays 7:30am-4pm CT)</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const next = !autoDJEnabled;
+                      setAutoDJEnabled(next);
+                      updateSetting('auto_dj_enabled', String(next));
+                    }}
+                    className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${
+                      autoDJEnabled ? 'bg-primary' : 'bg-surface-container-lowest'
+                    }`}
+                  >
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                      autoDJEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`} />
+                  </button>
+                </div>
+                {autoDJEnabled && (
+                  <div className="flex items-center justify-between gap-4 pl-4">
+                    <div className="min-w-0">
+                      <h4 className="font-medium text-on-surface text-sm">Ignore Time Window</h4>
+                      <p className="text-xs text-on-surface-variant mt-0.5">Play Auto-DJ anytime, not just weekdays 7:30am-4pm</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const next = !autoDJTimeOverride;
+                        setAutoDJTimeOverride(next);
+                        updateSetting('auto_dj_time_override', String(next));
+                      }}
+                      className={`w-11 h-6 rounded-full transition-colors relative flex-shrink-0 ${
+                        autoDJTimeOverride ? 'bg-primary' : 'bg-surface-container-lowest'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                        autoDJTimeOverride ? 'translate-x-6' : 'translate-x-1'
+                      }`} />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

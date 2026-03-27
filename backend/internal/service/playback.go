@@ -15,12 +15,13 @@ import (
 )
 
 type PlaybackService struct {
-	queries     store.Querier
-	redis       *redisclient.Client
-	wsbroadcast func(msg model.WSMessage)
-	broadcaster *audio.Broadcaster
-	preloadNext func(ctx context.Context) // called after advancing to preload the next track
-	mu          sync.Mutex
+	queries      store.Querier
+	redis        *redisclient.Client
+	wsbroadcast  func(msg model.WSMessage)
+	broadcaster  *audio.Broadcaster
+	preloadNext  func(ctx context.Context)
+	autoDJQueue  func(ctx context.Context) bool // returns true if an auto-DJ track was queued
+	mu           sync.Mutex
 }
 
 func NewPlaybackService(q store.Querier, r *redisclient.Client, wsbroadcast func(model.WSMessage), broadcaster *audio.Broadcaster) *PlaybackService {
@@ -35,6 +36,11 @@ func NewPlaybackService(q store.Querier, r *redisclient.Client, wsbroadcast func
 // SetPreloadNext sets the callback to preload the next track after advancing.
 func (s *PlaybackService) SetPreloadNext(fn func(ctx context.Context)) {
 	s.preloadNext = fn
+}
+
+// SetAutoDJQueue sets the callback to queue an auto-DJ track when the queue is empty.
+func (s *PlaybackService) SetAutoDJQueue(fn func(ctx context.Context) bool) {
+	s.autoDJQueue = fn
 }
 
 func (s *PlaybackService) GetCurrentState(ctx context.Context) (*model.PlaybackState, error) {
@@ -78,13 +84,20 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 	// Get next pending track with audio ready
 	next, err := s.queries.GetNextReadyPending(ctx)
 	if err != nil {
-		log.Println("No more tracks in queue, entering idle state")
-		s.redis.ClearPlaybackState(ctx)
-		s.wsbroadcast(model.WSMessage{
-			Type: "TRACK_CHANGE",
-			Data: model.TrackChangeData{VideoID: ""},
-		})
-		return
+		// No tracks ready — try auto-DJ
+		if s.autoDJQueue != nil && s.autoDJQueue(ctx) {
+			// Auto-DJ queued a track, retry
+			next, err = s.queries.GetNextReadyPending(ctx)
+		}
+		if err != nil {
+			log.Println("No more tracks in queue, entering idle state")
+			s.redis.ClearPlaybackState(ctx)
+			s.wsbroadcast(model.WSMessage{
+				Type: "TRACK_CHANGE",
+				Data: model.TrackChangeData{VideoID: ""},
+			})
+			return
+		}
 	}
 
 	// Mark as playing
@@ -97,7 +110,9 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 
 	// Look up requester name and avatar
 	var requesterName, requesterAvatar string
-	if user, err := s.queries.GetUser(ctx, next.RequestedBy); err == nil {
+	if next.RequestedBy == "auto-dj" {
+		requesterName = "Auto-DJ"
+	} else if user, err := s.queries.GetUser(ctx, next.RequestedBy); err == nil {
 		requesterName = user.Username
 		if user.AvatarUrl.Valid {
 			requesterAvatar = user.AvatarUrl.String
@@ -193,6 +208,7 @@ func (s *PlaybackService) GetCurrentAudioPath(ctx context.Context) (string, erro
 		return "", err
 	}
 	if !current.AudioPath.Valid {
+		log.Printf("[playback] audio_path is NULL for track %s (%s)", current.VideoID, current.Title)
 		return "", nil
 	}
 	return current.AudioPath.String, nil
