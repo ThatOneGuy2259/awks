@@ -141,6 +141,7 @@ func main() {
 	// Wire up auto-DJ
 	autodj.EnsureSystemUser(context.Background(), queries)
 	autoDJCacheDir := filepath.Join(filepath.Dir(cfg.AudioCacheDir), "auto-dj-cache")
+	autoDJBag := autodj.NewShuffleBag(autoDJCacheDir)
 	var autoDJMu sync.Mutex
 	playbackSvc.SetAutoDJQueue(func(ctx context.Context) bool {
 		// Prevent concurrent auto-DJ inserts
@@ -163,8 +164,8 @@ func main() {
 		if djCount > 0 {
 			return false
 		}
-		// Pick a random track from disk
-		videoID, filePath, title, artist, duration, ok := autodj.PickRandomTrack(autoDJCacheDir)
+		// Pick next track from shuffle bag
+		videoID, filePath, title, artist, duration, ok := autoDJBag.Pick()
 		if !ok {
 			log.Printf("[auto-dj] no tracks available on disk")
 			return false
@@ -208,26 +209,36 @@ func main() {
 	defer cancel()
 	playbackSvc.StartSyncTicker(ctx, hub.ListenerCount)
 
+	// Wire up crossfade hint
+	broadcaster.OnCrossfadeHint = func() {
+		hub.Broadcast(model.WSMessage{
+			Type: "CROSSFADE_HINT",
+			Data: map[string]float64{"fade_duration": 3.0},
+		})
+		log.Printf("[broadcaster] sent crossfade hint")
+	}
+
 	// Start broadcaster goroutine
-	go broadcaster.Run(ctx, func() (string, float64, error) {
+	go broadcaster.Run(ctx, func() (string, float64, int, error) {
 		path, err := playbackSvc.GetCurrentAudioPath(context.Background())
 		if err != nil || path == "" {
-			return "", 0, nil
+			return "", 0, 0, nil
 		}
 		state, _ := playbackSvc.GetCurrentState(context.Background())
 		var offset float64
+		var dur int
 		if state != nil {
+			dur = state.DurationSec
 			elapsed := time.Since(state.StartedAt).Seconds()
 			if state.DurationSec > 0 && elapsed >= float64(state.DurationSec) {
-				// Track expired by time — advance the queue
 				go playbackSvc.AdvanceQueue(context.Background())
-				return "", 0, nil
+				return "", 0, 0, nil
 			}
 			if elapsed > 1 {
 				offset = elapsed
 			}
 		}
-		return path, offset, nil
+		return path, offset, dur, nil
 	}, func(skipped bool) {
 		playbackSvc.AdvanceQueue(context.Background())
 	})

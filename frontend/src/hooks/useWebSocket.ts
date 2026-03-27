@@ -146,11 +146,10 @@ export function useWebSocket() {
 function handleMessage(msg: { type: string; data: unknown }) {
   const { type, data } = msg;
 
-  // Dispatch to registered callbacks first
+  // Dispatch to registered callbacks (in addition to the switch handler below)
   const cbs = messageCallbacks.get(type);
   if (cbs && cbs.size > 0) {
     cbs.forEach((cb) => cb(data));
-    return;
   }
 
   switch (type) {

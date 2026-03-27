@@ -16,9 +16,10 @@ import (
 // shared WebRTC track at real-time pace. All peer connections that have
 // this track added will receive the audio.
 type Broadcaster struct {
-	track  *webrtc.TrackLocalStaticSample
-	skipCh chan struct{}
-	wakeCh chan struct{}
+	track           *webrtc.TrackLocalStaticSample
+	skipCh          chan struct{}
+	wakeCh          chan struct{}
+	OnCrossfadeHint func() // called when track is ~3s from ending
 }
 
 func NewBroadcaster() (*Broadcaster, error) {
@@ -59,9 +60,10 @@ func (b *Broadcaster) Wake() {
 }
 
 // Run is the main broadcaster loop.
-func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, float64, error), onTrackDone func(skipped bool)) {
+// getNextTrack returns (audioPath, startOffset, durationSec, error).
+func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, float64, int, error), onTrackDone func(skipped bool)) {
 	for {
-		audioPath, startOffset, err := getNextTrack()
+		audioPath, startOffset, durationSec, err := getNextTrack()
 		if err != nil {
 			log.Printf("[broadcaster] error getting next track: %v", err)
 			time.Sleep(2 * time.Second)
@@ -77,14 +79,14 @@ func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, floa
 			}
 		}
 
-		log.Printf("[broadcaster] streaming %s (offset=%.1fs)", audioPath, startOffset)
-		skipped := b.streamFile(ctx, audioPath, startOffset)
+		log.Printf("[broadcaster] streaming %s (offset=%.1fs, duration=%ds)", audioPath, startOffset, durationSec)
+		skipped := b.streamFile(ctx, audioPath, startOffset, durationSec)
 		onTrackDone(skipped)
 	}
 }
 
 // streamFile reads an OGG/Opus file and writes samples to the WebRTC track at real-time pace.
-func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSec float64) bool {
+func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSec float64, durationSec int) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		log.Printf("[broadcaster] failed to open %s: %v", path, err)
@@ -121,6 +123,12 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 
 	startTime := time.Now()
 	startGranule := lastGranule
+	crossfadeHintSent := false
+	// Calculate the granule position where we should send the crossfade hint (3s before end)
+	var crossfadeGranule uint64
+	if durationSec > 3 {
+		crossfadeGranule = uint64((durationSec - 3)) * 48000
+	}
 
 	for {
 		select {
@@ -162,6 +170,14 @@ func (b *Broadcaster) streamFile(ctx context.Context, path string, startOffsetSe
 		}
 
 		lastGranule = pageHeader.GranulePosition
+
+		// Send crossfade hint 3 seconds before track ends
+		if !crossfadeHintSent && crossfadeGranule > 0 && pageHeader.GranulePosition >= crossfadeGranule {
+			crossfadeHintSent = true
+			if b.OnCrossfadeHint != nil {
+				b.OnCrossfadeHint()
+			}
+		}
 
 		// Pace: sleep to maintain real-time playback
 		pageTimeSec := float64(pageHeader.GranulePosition-startGranule) / 48000.0

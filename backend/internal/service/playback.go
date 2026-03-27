@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -181,8 +182,8 @@ func (s *PlaybackService) SkipCurrent(ctx context.Context, reason string) {
 	})
 	s.queries.DeleteSkipVotesForTrack(ctx, current.ID)
 
-	// Schedule audio file cleanup
-	if current.AudioPath.Valid {
+	// Schedule audio file cleanup (skip auto-DJ tracks — they're permanent)
+	if current.AudioPath.Valid && !strings.Contains(current.AudioPath.String, "auto-dj-cache") {
 		go func(path string) {
 			time.Sleep(30 * time.Second)
 			os.Remove(path)

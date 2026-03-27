@@ -234,6 +234,37 @@ export function useWebRTC() {
     return unsub;
   }, []);
 
+  // Crossfade: fade out on hint, fade in on track change
+  useEffect(() => {
+    const handleCrossfadeHint = () => {
+      const gain = gainNodeRef.current;
+      if (!gain) return;
+      // Fade gain to 0 over 3 seconds
+      const now = gain.context.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(0, now + 3);
+    };
+
+    const handleTrackChange = () => {
+      const gain = gainNodeRef.current;
+      if (!gain) return;
+      // Fade gain back up over 2 seconds
+      const targetVolume = volumeRef.current / 100;
+      const now = gain.context.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(targetVolume, now + 2);
+    };
+
+    onWsMessage('CROSSFADE_HINT', handleCrossfadeHint);
+    onWsMessage('TRACK_CHANGE', handleTrackChange);
+    return () => {
+      offWsMessage('CROSSFADE_HINT', handleCrossfadeHint);
+      offWsMessage('TRACK_CHANGE', handleTrackChange);
+    };
+  }, []);
+
   const setVolume = useCallback((vol: number) => {
     volumeRef.current = vol;
     setVolumeState(vol);

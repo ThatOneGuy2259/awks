@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mccann/awks3/backend/internal/store"
@@ -63,19 +64,55 @@ type TrackMeta struct {
 	Duration int    `json:"duration,omitempty"`
 }
 
-// PickRandomTrack returns a random track from the cache directory.
-func PickRandomTrack(cacheDir string) (videoID, filePath, title, artist string, duration int, ok bool) {
-	matches, _ := filepath.Glob(filepath.Join(cacheDir, "*.opus"))
-	if len(matches) == 0 {
+// ShuffleBag holds a shuffled list of tracks that gets refilled when exhausted.
+type ShuffleBag struct {
+	mu       sync.Mutex
+	cacheDir string
+	remaining []string // video IDs not yet played
+}
+
+func NewShuffleBag(cacheDir string) *ShuffleBag {
+	return &ShuffleBag{cacheDir: cacheDir}
+}
+
+// refill reloads all .opus files from disk and shuffles them.
+func (b *ShuffleBag) refill() {
+	matches, _ := filepath.Glob(filepath.Join(b.cacheDir, "*.opus"))
+	b.remaining = make([]string, 0, len(matches))
+	for _, m := range matches {
+		vid := strings.TrimSuffix(filepath.Base(m), ".opus")
+		b.remaining = append(b.remaining, vid)
+	}
+	// Fisher-Yates shuffle
+	for i := len(b.remaining) - 1; i > 0; i-- {
+		j := int(time.Now().UnixNano() % int64(i+1))
+		b.remaining[i], b.remaining[j] = b.remaining[j], b.remaining[i]
+	}
+	log.Printf("[auto-dj] shuffle bag refilled with %d tracks", len(b.remaining))
+}
+
+// Pick returns the next track from the bag, refilling if empty.
+func (b *ShuffleBag) Pick() (videoID, filePath, title, artist string, duration int, ok bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if len(b.remaining) == 0 {
+		b.refill()
+	}
+	if len(b.remaining) == 0 {
 		return "", "", "", "", 0, false
 	}
-	pick := matches[time.Now().UnixNano()%int64(len(matches))]
-	base := filepath.Base(pick)
-	vid := strings.TrimSuffix(base, ".opus")
 
-	// Try to read metadata sidecar
+	// Pop the last element
+	vid := b.remaining[len(b.remaining)-1]
+	b.remaining = b.remaining[:len(b.remaining)-1]
+
+	filePath = filepath.Join(b.cacheDir, vid+".opus")
 	title = vid
-	metaPath := filepath.Join(cacheDir, vid+".json")
+	artist = ""
+
+	// Read metadata sidecar
+	metaPath := filepath.Join(b.cacheDir, vid+".json")
 	if data, err := os.ReadFile(metaPath); err == nil {
 		var meta TrackMeta
 		if json.Unmarshal(data, &meta) == nil {
@@ -89,10 +126,10 @@ func PickRandomTrack(cacheDir string) (videoID, filePath, title, artist string, 
 
 	// If duration is missing, get it from ffprobe
 	if duration == 0 {
-		duration = probeDuration(pick)
+		duration = probeDuration(filePath)
 	}
 
-	return vid, pick, title, artist, duration, true
+	return vid, filePath, title, artist, duration, true
 }
 
 // probeDuration gets the duration in seconds from an audio file using ffprobe.
@@ -122,6 +159,19 @@ func countCachedFiles(cacheDir string) int {
 // BackfillMetadata generates JSON sidecar files for any .opus files that don't have one.
 func BackfillMetadata(ctx context.Context, ytdlpPath, cacheDir string) {
 	matches, _ := filepath.Glob(filepath.Join(cacheDir, "*.opus"))
+	missing := 0
+	for _, opusPath := range matches {
+		vid := strings.TrimSuffix(filepath.Base(opusPath), ".opus")
+		jsonPath := filepath.Join(cacheDir, vid+".json")
+		if _, err := os.Stat(jsonPath); err == nil {
+			continue
+		}
+		missing++
+	}
+	if missing == 0 {
+		return
+	}
+	log.Printf("[auto-dj] backfilling metadata for %d tracks...", missing)
 	for _, opusPath := range matches {
 		base := filepath.Base(opusPath)
 		vid := strings.TrimSuffix(base, ".opus")
