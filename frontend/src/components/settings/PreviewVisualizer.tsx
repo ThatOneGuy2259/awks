@@ -24,16 +24,22 @@ export function PreviewVisualizer({ primary, secondary, background }: PreviewVis
     if (hueDelta > 180) hueDelta -= 360;
     if (hueDelta < -180) hueDelta += 360;
 
+    const satDelta = secondaryHSL.s - primaryHSL.s;
+
     const colorsTop: string[] = [];
     const colorsMid: string[] = [];
     const colorsDim: string[] = [];
     const colorsFade: string[] = [];
     for (let i = 0; i < barCount; i++) {
-      const hue = primaryHSL.h + (i / barCount) * hueDelta;
-      colorsTop.push(`hsl(${hue}, 90%, 75%)`);
-      colorsMid.push(`hsl(${hue}, 85%, 55%)`);
-      colorsDim.push(`hsla(${hue}, 85%, 55%, 0.4)`);
-      colorsFade.push(`hsla(${hue}, 85%, 55%, 0)`);
+      const t = i / barCount;
+      const hue = primaryHSL.h + t * hueDelta;
+      const sat = primaryHSL.s + t * satDelta;
+      const satTop = Math.min(sat * 1.1, 100);
+      const satMid = Math.min(sat * 1.05, 100);
+      colorsTop.push(`hsl(${hue}, ${satTop}%, 75%)`);
+      colorsMid.push(`hsl(${hue}, ${satMid}%, 55%)`);
+      colorsDim.push(`hsla(${hue}, ${satMid}%, 55%, 0.4)`);
+      colorsFade.push(`hsla(${hue}, ${satMid}%, 55%, 0)`);
     }
 
     const freqs = Array.from({ length: barCount }, (_, i) => 0.8 + Math.sin(i * 0.7) * 0.4);

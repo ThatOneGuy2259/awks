@@ -33,22 +33,31 @@ export function useVisualizer(
     const barCount = 128;
     const binMappings: Array<{ start: number; end: number }> = [];
 
+    // Interpolate saturation from source colors so achromatic themes stay grayscale
+    const satDelta = secondaryHSL.s - primaryHSL.s;
+
     // Pre-compute gradient colors from theme hues
     const colorsTop: string[] = [];
     const colorsMid: string[] = [];
     const colorsDim: string[] = [];
     for (let i = 0; i < barCount; i++) {
-      const hue = primaryHSL.h + (i / barCount) * hueDelta;
-      colorsTop.push(`hsl(${hue}, 90%, 75%)`);   // bright peak
-      colorsMid.push(`hsl(${hue}, 85%, 55%)`);    // mid bar
-      colorsDim.push(`hsla(${hue}, 85%, 55%, 0.4)`); // reflection start
+      const t = i / barCount;
+      const hue = primaryHSL.h + t * hueDelta;
+      const sat = primaryHSL.s + t * satDelta;
+      const satTop = Math.min(sat * 1.1, 100);   // slightly boosted for vibrancy
+      const satMid = Math.min(sat * 1.05, 100);
+      colorsTop.push(`hsl(${hue}, ${satTop}%, 75%)`);   // bright peak
+      colorsMid.push(`hsl(${hue}, ${satMid}%, 55%)`);    // mid bar
+      colorsDim.push(`hsla(${hue}, ${satMid}%, 55%, 0.4)`); // reflection start
     }
 
     // Separate array for reflection end color
     const colorsFade: string[] = [];
     for (let i = 0; i < barCount; i++) {
-      const hue = primaryHSL.h + (i / barCount) * hueDelta;
-      colorsFade.push(`hsla(${hue}, 85%, 55%, 0)`); // fully transparent same hue
+      const t = i / barCount;
+      const hue = primaryHSL.h + t * hueDelta;
+      const sat = Math.min((primaryHSL.s + t * satDelta) * 1.05, 100);
+      colorsFade.push(`hsla(${hue}, ${sat}%, 55%, 0)`); // fully transparent same hue
     }
 
     const smoothed = new Float32Array(barCount);
