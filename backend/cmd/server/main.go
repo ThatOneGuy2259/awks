@@ -204,7 +204,7 @@ func main() {
 	// API routes with auth
 	r.Route("/api", func(r chi.Router) {
 		r.Use(auth.ClerkMiddleware(cfg.ClerkSecretKey))
-		r.Use(httprate.LimitByIP(60, time.Minute)) // 60 requests per minute per IP
+		r.Use(httprate.LimitByIP(120, time.Minute)) // 120 requests per minute per IP
 
 		r.Get("/queue", queueH.GetQueue)
 		r.Post("/queue", queueH.AddToQueue)

@@ -32,3 +32,8 @@ stitch/
 
 # Frontend misc
 frontend/README.md
+
+# Playwright
+e2e/.auth/
+test-results/
+playwright-report/
