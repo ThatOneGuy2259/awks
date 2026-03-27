@@ -23,7 +23,11 @@ function loadFromStorage(): StoredCustomTheme[] {
 }
 
 function saveToStorage(customThemes: StoredCustomTheme[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(customThemes));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(customThemes));
+  } catch {
+    // localStorage full — state is still updated in memory
+  }
 }
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;

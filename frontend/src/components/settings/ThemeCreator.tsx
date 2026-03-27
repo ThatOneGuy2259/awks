@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
-import { themes } from '../../stores/themeStore';
-import { useCustomThemeStore, type CustomThemeInput } from '../../stores/customThemeStore';
+import { useThemeStore, applyTheme, themes } from '../../stores/themeStore';
+import { useCustomThemeStore, getAllThemes, type CustomThemeInput } from '../../stores/customThemeStore';
 import { deriveTheme } from '../../lib/colorUtils';
 import { PreviewVisualizer } from './PreviewVisualizer';
 
@@ -66,7 +66,12 @@ export function ThemeCreator({ onClose, editId, editInput }: ThemeCreatorProps) 
   const handleSave = () => {
     if (!name.trim()) return;
     const input: CustomThemeInput = { name: name.trim(), background, primary, secondary, forkedFrom };
-    saveTheme(input, editId);
+    const id = saveTheme(input, editId);
+    const saved = getAllThemes().find((t) => t.id === id);
+    if (saved) {
+      useThemeStore.getState().setTheme(id);
+      applyTheme(saved);
+    }
     onClose();
   };
 
