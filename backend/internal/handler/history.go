@@ -32,6 +32,9 @@ func (h *HistoryHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if rows == nil {
+		rows = []store.GetHistoryRow{}
+	}
 	writeJSON(w, rows)
 }
 

@@ -14,8 +14,9 @@ export function HistoryView() {
     setLoading(true);
     api.getHistory(20, 0)
       .then((data) => {
-        setEntries(data);
-        setHasMore(data.length >= 20);
+        const rows = data || [];
+        setEntries(rows);
+        setHasMore(rows.length >= 20);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -30,8 +31,9 @@ export function HistoryView() {
     setLoadingMore(true);
     api.getHistory(20, entries.length)
       .then((data) => {
-        setEntries((prev) => [...prev, ...data]);
-        setHasMore(data.length >= 20);
+        const rows = data || [];
+        setEntries((prev) => [...prev, ...rows]);
+        setHasMore(rows.length >= 20);
       })
       .catch(() => {})
       .finally(() => setLoadingMore(false));
