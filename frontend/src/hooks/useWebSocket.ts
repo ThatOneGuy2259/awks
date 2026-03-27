@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useAuth, useUser } from '@clerk/clerk-react';
+import { useAuth } from '@clerk/clerk-react';
 import { usePlaybackStore } from '../stores/playbackStore';
 import { useQueueStore } from '../stores/queueStore';
 import { useSkipVoteStore } from '../stores/skipVoteStore';
@@ -13,6 +13,8 @@ const WS_URL = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.
 
 // Module-level singleton — only one connection ever exists
 let ws: WebSocket | null = null;
+let getTokenFn: (() => Promise<string | null>) | null = null;
+let pendingMessages: string[] = [];
 
 type MessageCallback = (data: unknown) => void;
 const messageCallbacks: Map<string, Set<MessageCallback>> = new Map();
@@ -38,20 +40,21 @@ export function offWsMessage(type: string, callback?: MessageCallback) {
   }
 }
 
-function connectWs(userId: string, username: string, avatarUrl: string) {
+function connectWs(token: string) {
   // Prevent duplicate connections
   if (ws && ws.readyState <= WebSocket.OPEN) return;
 
-  const params = new URLSearchParams({
-    user_id: userId,
-    username,
-    avatar_url: avatarUrl,
-  });
+  const params = new URLSearchParams({ token });
   const socket = new WebSocket(`${WS_URL}?${params.toString()}`);
   ws = socket;
 
   socket.onopen = () => {
     console.log('[WS] connected');
+    // Flush any messages queued before the socket was ready
+    for (const msg of pendingMessages) {
+      socket.send(msg);
+    }
+    pendingMessages = [];
     api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
     api.getPlayback().then((state) => {
       if (state && state.video_id) {
@@ -97,16 +100,26 @@ function connectWs(userId: string, username: string, avatarUrl: string) {
   socket.onclose = () => {
     console.log('[WS] disconnected, reconnecting...');
     ws = null;
-    setTimeout(() => connectWs(userId, username, avatarUrl), 2000);
+    // Get a fresh token on reconnect (Clerk tokens are short-lived)
+    setTimeout(() => {
+      if (getTokenFn) {
+        getTokenFn().then((freshToken) => {
+          if (freshToken) connectWs(freshToken);
+        });
+      }
+    }, 2000);
   };
 
   socket.onerror = () => socket.close();
 }
 
-/** Send a message over the WebSocket. Can be called from anywhere. */
+/** Send a message over the WebSocket. Queues if not yet connected. */
 export function wsSend(type: string, data: unknown) {
+  const msg = JSON.stringify({ type, data });
   if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type, data }));
+    ws.send(msg);
+  } else {
+    pendingMessages.push(msg);
   }
 }
 
@@ -115,21 +128,15 @@ export function wsSend(type: string, data: unknown) {
  * Do NOT call from child components — use wsSend() directly instead.
  */
 export function useWebSocket() {
-  const { userId } = useAuth();
-  const { user } = useUser();
-
-  const firstName = user?.firstName || '';
-  const lastName = user?.lastName || '';
-  const username = firstName && lastName
-    ? `${firstName.charAt(0)}. ${lastName}`
-    : firstName || user?.username || userId?.slice(0, 8) || 'anon';
-  const avatarUrl = user?.imageUrl || '';
+  const { userId, getToken } = useAuth();
 
   useEffect(() => {
     if (!userId) return;
-    connectWs(userId, username, avatarUrl);
-    // Do NOT close on unmount — singleton persists across StrictMode remounts
-  }, [userId, username, avatarUrl]);
+    getTokenFn = getToken;
+    getToken().then((token) => {
+      if (token) connectWs(token);
+    });
+  }, [userId, getToken]);
 }
 
 function handleMessage(msg: { type: string; data: unknown }) {

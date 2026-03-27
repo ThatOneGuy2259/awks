@@ -83,13 +83,8 @@ func main() {
 	hub := ws.NewHub(nil)
 	go hub.Run()
 
-	// Playback Service
-	playbackSvc := service.NewPlaybackService(queries, rdb, func(msg model.WSMessage) {
-		hub.Broadcast(msg)
-	}, broadcaster)
-
-	// Rebuild hub with onChange that broadcasts listener updates
-	hub = ws.NewHub(func() {
+	// Set onChange after creation to avoid circular reference
+	hub.SetOnChange(func() {
 		listeners := hub.GetListeners()
 		hub.Broadcast(model.WSMessage{
 			Type: "LISTENER_UPDATE",
@@ -99,10 +94,9 @@ func main() {
 			},
 		})
 	})
-	go hub.Run()
 
-	// Rebuild playback service with the new hub
-	playbackSvc = service.NewPlaybackService(queries, rdb, func(msg model.WSMessage) {
+	// Playback Service
+	playbackSvc := service.NewPlaybackService(queries, rdb, func(msg model.WSMessage) {
 		hub.Broadcast(msg)
 	}, broadcaster)
 
@@ -176,7 +170,7 @@ func main() {
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowOriginFunc: func(r *http.Request, origin string) bool { return true },
+		AllowedOrigins:  strings.Split(cfg.CORSOrigin, ","),
 		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:  []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,

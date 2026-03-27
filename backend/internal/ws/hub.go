@@ -37,6 +37,13 @@ func NewHub(onChange func()) *Hub {
 	}
 }
 
+// SetOnChange updates the callback invoked when clients connect or disconnect.
+func (h *Hub) SetOnChange(fn func()) {
+	h.mu.Lock()
+	h.onChange = fn
+	h.mu.Unlock()
+}
+
 func (h *Hub) Run() {
 	for {
 		select {

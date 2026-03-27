@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/clerk/clerk-sdk-go/v2/jwt"
+	"github.com/clerk/clerk-sdk-go/v2/user"
 	"github.com/gorilla/websocket"
 	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/model"
@@ -27,19 +30,59 @@ func NewWSHandler(hub *ws.Hub, pm *audio.PeerManager) *WSHandler {
 }
 
 func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
+	// Verify Clerk JWT from query parameter
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		http.Error(w, "missing token", http.StatusUnauthorized)
+		return
+	}
+
+	claims, err := jwt.Verify(context.Background(), &jwt.VerifyParams{Token: token})
+	if err != nil {
+		log.Printf("[ws] invalid token: %v", err)
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	userID := claims.Subject
+
+	// Fetch user details from Clerk
+	clerkUser, err := user.Get(r.Context(), userID)
+	if err != nil {
+		log.Printf("[ws] clerk get user error: %v", err)
+		http.Error(w, "could not resolve user", http.StatusUnauthorized)
+		return
+	}
+
+	// Build display name
+	username := ""
+	firstName := ""
+	lastName := ""
+	if clerkUser.FirstName != nil {
+		firstName = *clerkUser.FirstName
+	}
+	if clerkUser.LastName != nil {
+		lastName = *clerkUser.LastName
+	}
+	if firstName != "" && lastName != "" {
+		username = string([]rune(firstName)[0]) + ". " + lastName
+	} else if firstName != "" {
+		username = firstName
+	} else if clerkUser.Username != nil && *clerkUser.Username != "" {
+		username = *clerkUser.Username
+	} else {
+		username = userID[:8]
+	}
+
+	avatar := ""
+	if clerkUser.ImageURL != nil {
+		avatar = *clerkUser.ImageURL
+	}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("ws upgrade error: %v", err)
 		return
-	}
-
-	// Get user info from query params
-	userID := r.URL.Query().Get("user_id")
-	username := r.URL.Query().Get("username")
-	avatar := r.URL.Query().Get("avatar_url")
-	if userID == "" {
-		userID = "anonymous"
-		username = "Anonymous"
 	}
 
 	client := &ws.Client{
@@ -96,7 +139,6 @@ func (h *WSHandler) handleMessage(c *ws.Client, raw []byte) {
 		if err := json.Unmarshal(msg.Data, &data); err != nil || data.Emoji == "" {
 			return
 		}
-		// Validate emoji is in allowed set
 		allowed := map[string]bool{"🔥": true, "❤️": true, "😂": true, "💀": true, "🗑️": true}
 		if !allowed[data.Emoji] {
 			return
