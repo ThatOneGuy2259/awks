@@ -1,10 +1,30 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
+import { useThemeStore } from '../stores/themeStore';
+import { getAllThemes } from '../stores/customThemeStore';
+
+function hexToHSL(hex: string): { h: number; s: number; l: number } {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) return { h: 0, s: 0, l: l * 100 };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h: number;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return { h: h * 360, s: s * 100, l: l * 100 };
+}
 
 export function useVisualizer(
   analyserRef: RefObject<AnalyserNode | null>,
 ) {
   const animFrameRef = useRef<number>(0);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const currentTheme = useThemeStore((s) => s.currentTheme);
 
   const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
     setCanvas(node);
@@ -16,17 +36,25 @@ export function useVisualizer(
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
 
+    // Derive visualizer hues from the active theme's primary & secondary colors
+    const theme = getAllThemes().find((t) => t.id === currentTheme);
+    const primaryHSL = hexToHSL(theme?.preview.primary ?? '#cf96ff');
+    const secondaryHSL = hexToHSL(theme?.preview.secondary ?? '#00f4fe');
+    let hueDelta = secondaryHSL.h - primaryHSL.h;
+    if (hueDelta > 180) hueDelta -= 360;
+    if (hueDelta < -180) hueDelta += 360;
+
     let dataArray: Uint8Array | null = null;
 
     const barCount = 128;
     const binMappings: Array<{ start: number; end: number }> = [];
 
-    // Pre-compute gradient colors (top and bottom for each bar)
+    // Pre-compute gradient colors from theme hues
     const colorsTop: string[] = [];
     const colorsMid: string[] = [];
     const colorsDim: string[] = [];
     for (let i = 0; i < barCount; i++) {
-      const hue = 280 - (i / barCount) * 110;
+      const hue = primaryHSL.h + (i / barCount) * hueDelta;
       colorsTop.push(`hsl(${hue}, 90%, 75%)`);   // bright peak
       colorsMid.push(`hsl(${hue}, 85%, 55%)`);    // mid bar
       colorsDim.push(`hsla(${hue}, 85%, 55%, 0.4)`); // reflection start
@@ -35,7 +63,7 @@ export function useVisualizer(
     // Separate array for reflection end color
     const colorsFade: string[] = [];
     for (let i = 0; i < barCount; i++) {
-      const hue = 280 - (i / barCount) * 110;
+      const hue = primaryHSL.h + (i / barCount) * hueDelta;
       colorsFade.push(`hsla(${hue}, 85%, 55%, 0)`); // fully transparent same hue
     }
 
@@ -155,7 +183,7 @@ export function useVisualizer(
 
     draw();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [canvas, analyserRef]);
+  }, [canvas, analyserRef, currentTheme]);
 
   return canvasRef;
 }
