@@ -141,9 +141,9 @@ func main() {
 		var offset float64
 		if state != nil {
 			elapsed := time.Since(state.StartedAt).Seconds()
-			// Don't seek past the track duration — if the track already ended,
-			// return empty so the broadcaster advances instead of seeking into EOF
 			if elapsed >= float64(state.DurationSec) {
+				// Track expired by time — advance the queue
+				go playbackSvc.AdvanceQueue(context.Background())
 				return "", 0, nil
 			}
 			if elapsed > 1 {
