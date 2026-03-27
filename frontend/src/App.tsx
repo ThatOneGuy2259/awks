@@ -13,6 +13,17 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useWebRTC } from './hooks/useWebRTC';
 import { setGetTokenFn, api } from './lib/api';
 import { useUserStore } from './stores/userStore';
+import { useThemeStore, applyTheme } from './stores/themeStore';
+import { getAllThemes } from './stores/customThemeStore';
+
+// Apply saved theme on module load (before React renders)
+const startupThemeId = useThemeStore.getState().currentTheme;
+const startupTheme = getAllThemes().find((t) => t.id === startupThemeId);
+if (startupTheme) {
+  applyTheme(startupTheme);
+} else {
+  applyTheme('neon_groove');
+}
 
 function AuthenticatedApp() {
   const { getToken } = useAuth();
