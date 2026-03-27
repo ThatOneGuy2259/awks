@@ -1,13 +1,13 @@
 import { NavLink } from 'react-router-dom';
 import { useUserStore } from '../../stores/userStore';
 
-const baseTabs = [
+const baseTabs: { to: string; icon: string; label: string; primary?: boolean }[] = [
   { to: '/', icon: 'graphic_eq', label: 'Now Playing', primary: true },
   { to: '/search', icon: 'search', label: 'Search' },
   { to: '/history', icon: 'history', label: 'History' },
 ];
 
-const adminTab = { to: '/admin', icon: 'dashboard_customize', label: 'Admin' };
+const adminTab: { to: string; icon: string; label: string; primary?: boolean } = { to: '/admin', icon: 'dashboard_customize', label: 'Admin' };
 
 export function BottomNav() {
   const isAdmin = useUserStore((s) => s.role === 'admin');

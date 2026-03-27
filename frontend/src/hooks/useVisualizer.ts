@@ -28,7 +28,7 @@ export function useVisualizer(
     if (hueDelta > 180) hueDelta -= 360;
     if (hueDelta < -180) hueDelta += 360;
 
-    let dataArray: Uint8Array | null = null;
+    let dataArray: Uint8Array<ArrayBuffer> | null = null;
 
     const barCount = 128;
     const binMappings: Array<{ start: number; end: number }> = [];

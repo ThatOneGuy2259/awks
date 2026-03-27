@@ -12,7 +12,6 @@ const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`;
 
 // Module-level singleton — only one connection ever exists
 let ws: WebSocket | null = null;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
 type MessageCallback = (data: unknown) => void;
 const messageCallbacks: Map<string, MessageCallback> = new Map();
@@ -84,7 +83,7 @@ function connectWs(userId: string, username: string, avatarUrl: string) {
   socket.onclose = () => {
     console.log('[WS] disconnected, reconnecting...');
     ws = null;
-    reconnectTimer = setTimeout(() => connectWs(userId, username, avatarUrl), 2000);
+    setTimeout(() => connectWs(userId, username, avatarUrl), 2000);
   };
 
   socket.onerror = () => socket.close();
