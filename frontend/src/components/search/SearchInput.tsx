@@ -59,9 +59,20 @@ export function SearchInput({ value, onChange, onSubmit }: SearchInputProps) {
     onSubmit(s);
   };
 
+  const clearSuggestions = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (abortRef.current) abortRef.current.abort();
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setHighlightIndex(-1);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!showSuggestions || suggestions.length === 0) {
-      if (e.key === 'Enter') onSubmit();
+      if (e.key === 'Enter') {
+        clearSuggestions();
+        onSubmit();
+      }
       return;
     }
 
@@ -79,13 +90,12 @@ export function SearchInput({ value, onChange, onSubmit }: SearchInputProps) {
         if (highlightIndex >= 0 && highlightIndex < suggestions.length) {
           selectSuggestion(suggestions[highlightIndex]);
         } else {
-          setShowSuggestions(false);
+          clearSuggestions();
           onSubmit();
         }
         break;
       case 'Escape':
-        setShowSuggestions(false);
-        setHighlightIndex(-1);
+        clearSuggestions();
         break;
     }
   };
