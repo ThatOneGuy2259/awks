@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, type RefObject } from 'react'
 import { useThemeStore } from '../stores/themeStore';
 import { getAllThemes } from '../stores/customThemeStore';
 import { hexToHSL } from '../lib/colorUtils';
+import { useVisualizerStore, BAND_COUNT } from '../stores/visualizerStore';
 
 export function useVisualizer(
   analyserRef: RefObject<AnalyserNode | null>,
@@ -9,6 +10,9 @@ export function useVisualizer(
   const animFrameRef = useRef<number>(0);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const currentTheme = useThemeStore((s) => s.currentTheme);
+  const bandGains = useVisualizerStore((s) => s.bandGains);
+  const mirrored = useVisualizerStore((s) => s.mirrored);
+  const orientation = useVisualizerStore((s) => s.orientation);
 
   const canvasRef = useCallback((node: HTMLCanvasElement | null) => {
     setCanvas(node);
@@ -20,7 +24,6 @@ export function useVisualizer(
     const ctx = canvas.getContext('2d', { alpha: true });
     if (!ctx) return;
 
-    // Derive visualizer hues from the active theme's primary & secondary colors
     const theme = getAllThemes().find((t) => t.id === currentTheme);
     const primaryHSL = hexToHSL(theme?.preview.primary ?? '#cf96ff');
     const secondaryHSL = hexToHSL(theme?.preview.secondary ?? '#00f4fe');
@@ -31,12 +34,11 @@ export function useVisualizer(
     let dataArray: Uint8Array<ArrayBuffer> | null = null;
 
     const barCount = 128;
+    const barsPerBand = barCount / BAND_COUNT; // 16 bars per EQ band
     const binMappings: Array<{ start: number; end: number }> = [];
 
-    // Interpolate saturation from source colors so achromatic themes stay grayscale
     const satDelta = secondaryHSL.s - primaryHSL.s;
 
-    // Pre-compute gradient colors from theme hues
     const colorsTop: string[] = [];
     const colorsMid: string[] = [];
     const colorsDim: string[] = [];
@@ -44,34 +46,34 @@ export function useVisualizer(
       const t = i / barCount;
       const hue = primaryHSL.h + t * hueDelta;
       const sat = primaryHSL.s + t * satDelta;
-      const satTop = Math.min(sat * 1.1, 100);   // slightly boosted for vibrancy
+      const satTop = Math.min(sat * 1.1, 100);
       const satMid = Math.min(sat * 1.05, 100);
-      colorsTop.push(`hsl(${hue}, ${satTop}%, 75%)`);   // bright peak
-      colorsMid.push(`hsl(${hue}, ${satMid}%, 55%)`);    // mid bar
-      colorsDim.push(`hsla(${hue}, ${satMid}%, 55%, 0.4)`); // reflection start
+      colorsTop.push(`hsl(${hue}, ${satTop}%, 75%)`);
+      colorsMid.push(`hsl(${hue}, ${satMid}%, 55%)`);
+      colorsDim.push(`hsla(${hue}, ${satMid}%, 55%, 0.4)`);
     }
 
-    // Separate array for reflection end color
     const colorsFade: string[] = [];
     for (let i = 0; i < barCount; i++) {
       const t = i / barCount;
       const hue = primaryHSL.h + t * hueDelta;
       const sat = Math.min((primaryHSL.s + t * satDelta) * 1.05, 100);
-      colorsFade.push(`hsla(${hue}, ${sat}%, 55%, 0)`); // fully transparent same hue
+      colorsFade.push(`hsla(${hue}, ${sat}%, 55%, 0)`);
     }
 
     const smoothed = new Float32Array(barCount);
-    const peaks = new Float32Array(barCount);      // peak indicator positions
-    const peakDecay = new Float32Array(barCount);   // peak fall velocity
+    const peaks = new Float32Array(barCount);
+    const peakDecay = new Float32Array(barCount);
     let recentPeak = 80;
 
     const initBinMappings = (totalBins: number) => {
       binMappings.length = 0;
+      const usableBins = Math.floor(totalBins * 0.6);
       for (let i = 0; i < barCount; i++) {
         const t0 = i / barCount;
         const t1 = (i + 1) / barCount;
-        const start = Math.floor(Math.pow(t0, 1.5) * totalBins);
-        const end = Math.min(Math.floor(Math.pow(t1, 1.5) * totalBins), totalBins - 1);
+        const start = Math.floor(Math.pow(t0, 1.5) * usableBins);
+        const end = Math.min(Math.floor(Math.pow(t1, 1.5) * usableBins), usableBins - 1);
         binMappings.push({ start, end: Math.max(end, start) });
       }
     };
@@ -89,7 +91,6 @@ export function useVisualizer(
 
       analyser.getByteFrequencyData(dataArray);
 
-      // Auto-normalization
       let framePeak = 0;
       for (let i = 0; i < dataArray.length; i++) {
         if (dataArray[i] > framePeak) framePeak = dataArray[i];
@@ -106,14 +107,16 @@ export function useVisualizer(
       ctx.clearRect(0, 0, w, h);
 
       const gap = 2;
-      const totalBars = barCount * 2;
+      const totalBars = mirrored ? barCount * 2 : barCount;
       const barWidth = (w - gap * (totalBars - 1)) / totalBars;
       const centerX = w / 2;
 
-      // Baseline at 180px — bars go up from here, reflections go down into the player bar
       const baseline = 180;
-      const maxBarHeight = baseline - 24; // headroom at top
-      const maxReflectionHeight = h - baseline; // ~100px reflection area
+      const maxBarHeight = baseline - 24;
+      const maxReflectionHeight = h - baseline;
+
+      // Read current band gains from store (read once per frame for consistency)
+      const gains = bandGains;
 
       for (let i = 0; i < barCount; i++) {
         const mapping = binMappings[i];
@@ -124,9 +127,15 @@ export function useVisualizer(
           count++;
         }
         const avg = count > 0 ? sum / count : 0;
-        const normalized = Math.min(avg / normPeak, 1.0);
 
-        // Per-band smoothing
+        // Apply per-band EQ gain with smooth interpolation between bands
+        const bandPos = (i / barCount) * (BAND_COUNT - 1); // continuous position across bands
+        const bandLow = Math.floor(bandPos);
+        const bandHigh = Math.min(bandLow + 1, BAND_COUNT - 1);
+        const bandFrac = bandPos - bandLow;
+        const bandGain = gains[bandLow] * (1 - bandFrac) + gains[bandHigh] * bandFrac;
+        const normalized = Math.min((avg / normPeak) * bandGain, 1.0);
+
         const bandPosition = i / barCount;
         const smoothing = 0.2 + bandPosition * 0.5;
         smoothed[i] = smoothed[i] * smoothing + normalized * (1 - smoothing);
@@ -134,24 +143,21 @@ export function useVisualizer(
         const value = smoothed[i];
         const barHeight = Math.max(value * maxBarHeight, 2);
 
-        // Peak indicator: track and decay
         if (value > peaks[i]) {
           peaks[i] = value;
           peakDecay[i] = 0;
         } else {
-          peakDecay[i] += 0.0008; // gravity acceleration
+          peakDecay[i] += 0.0008;
           peaks[i] = Math.max(peaks[i] - peakDecay[i], 0);
         }
 
         const drawBarSet = (x: number) => {
-          // --- Main bar with vertical gradient ---
           const grad = ctx.createLinearGradient(0, baseline - barHeight, 0, baseline);
-          grad.addColorStop(0, colorsTop[i]);   // bright at top
-          grad.addColorStop(1, colorsMid[i]);    // deeper at bottom
+          grad.addColorStop(0, colorsTop[i]);
+          grad.addColorStop(1, colorsMid[i]);
           ctx.fillStyle = grad;
           ctx.fillRect(x, baseline - barHeight, barWidth, barHeight);
 
-          // --- Reflection below baseline ---
           const reflectionHeight = Math.min(barHeight * 0.5, maxReflectionHeight);
           const reflGrad = ctx.createLinearGradient(0, baseline, 0, baseline + reflectionHeight);
           reflGrad.addColorStop(0, colorsDim[i]);
@@ -159,7 +165,6 @@ export function useVisualizer(
           ctx.fillStyle = reflGrad;
           ctx.fillRect(x, baseline, barWidth, reflectionHeight);
 
-          // --- Peak indicator dot ---
           const peakY = baseline - peaks[i] * maxBarHeight;
           if (peaks[i] > 0.05) {
             ctx.fillStyle = colorsTop[i];
@@ -167,16 +172,20 @@ export function useVisualizer(
           }
         };
 
-        // Right side
-        drawBarSet(centerX + i * (barWidth + gap));
-        // Left side (mirror)
-        drawBarSet(centerX - (i + 1) * (barWidth + gap));
+        if (mirrored) {
+          const pos = orientation === 'flipped' ? barCount - 1 - i : i;
+          drawBarSet(centerX + pos * (barWidth + gap));
+          drawBarSet(centerX - (pos + 1) * (barWidth + gap));
+        } else {
+          const pos = orientation === 'flipped' ? barCount - 1 - i : i;
+          drawBarSet(pos * (barWidth + gap));
+        }
       }
     };
 
     draw();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [canvas, analyserRef, currentTheme]);
+  }, [canvas, analyserRef, currentTheme, bandGains, mirrored, orientation]);
 
   return canvasRef;
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { UserButton } from '@clerk/clerk-react';
 import { ThemeModal } from '../settings/ThemeModal';
+import { AwksLogo } from '../AwksLogo';
 
 export function TopBar() {
   const [showSettings, setShowSettings] = useState(false);
@@ -9,7 +10,7 @@ export function TopBar() {
     <>
       <header className="fixed top-0 right-0 left-0 lg:left-64 z-50 bg-background/60 backdrop-blur-xl flex justify-between items-center px-6 py-4">
         <div className="flex items-center gap-2 lg:hidden">
-          <span className="text-2xl font-black text-primary tracking-tighter font-headline">AWKS</span>
+          <AwksLogo className="h-7 w-auto" />
         </div>
         <div className="hidden lg:block" />
 

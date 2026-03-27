@@ -202,6 +202,7 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
             ))}
           </div>
         </div>
+
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ import { setGetTokenFn, api } from './lib/api';
 import { useUserStore } from './stores/userStore';
 import { useThemeStore, applyTheme } from './stores/themeStore';
 import { getAllThemes } from './stores/customThemeStore';
+import { AwksLogo } from './components/AwksLogo';
 
 // Apply saved theme on module load (before React renders)
 const startupThemeId = useThemeStore.getState().currentTheme;
@@ -98,7 +99,7 @@ export default function App() {
       <SignedOut>
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="text-center">
-            <h1 className="text-4xl font-black text-primary font-headline mb-2 tracking-tighter">AWKS</h1>
+            <AwksLogo className="h-14 w-auto mx-auto mb-2" />
             <p className="text-on-surface-variant text-sm font-body mb-8">The Neon Nocturne</p>
             <SignIn
               appearance={{

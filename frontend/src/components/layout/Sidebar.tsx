@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
 import { useUserStore } from '../../stores/userStore';
+import { AwksLogo } from '../AwksLogo';
 
 const baseNavItems = [
   { to: '/', icon: 'graphic_eq', label: 'Now Playing' },
@@ -21,16 +22,11 @@ export function Sidebar({ listening }: SidebarProps) {
 
   return (
     <aside className="fixed left-0 top-0 h-full w-64 border-r border-outline-variant/10 bg-surface-container-low hidden lg:flex flex-col py-8 z-40">
-      <div className="px-6 mb-10 flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full signature-gradient flex items-center justify-center text-on-primary-fixed shadow-lg shadow-primary/20">
-          <span className="material-symbols-outlined">graphic_eq</span>
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-primary font-headline leading-tight">AWKS</h2>
-          <p className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold font-label">
-            Fill the Awkward Silence
-          </p>
-        </div>
+      <div className="px-6 mb-10">
+        <AwksLogo className="h-8 w-auto mb-1" />
+        <p className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold font-label">
+          Fill the Awkward Silence
+        </p>
       </div>
 
       <nav className="flex-1 space-y-2 px-2">
