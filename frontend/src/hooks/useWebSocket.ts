@@ -8,7 +8,8 @@ import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { api } from '../lib/api';
 
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/ws`;
+const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.host}/ws`;
 
 // Module-level singleton — only one connection ever exists
 let ws: WebSocket | null = null;
