@@ -3,6 +3,7 @@ import { wsSend, onWsMessage, offWsMessage } from '../../hooks/useWebSocket';
 import { usePlaybackStore } from '../../stores/playbackStore';
 
 const EMOJIS = ['🔥', '❤️', '😂', '💀', '🗑️'];
+const REACTION_THROTTLE_MS = 500;
 
 export function ReactionBar() {
   const lastSent = useRef(0);
@@ -27,7 +28,7 @@ export function ReactionBar() {
 
   const handleReaction = (emoji: string) => {
     const now = Date.now();
-    if (now - lastSent.current < 500) return;
+    if (now - lastSent.current < REACTION_THROTTLE_MS) return;
     lastSent.current = now;
     wsSend('REACTION', { emoji });
   };

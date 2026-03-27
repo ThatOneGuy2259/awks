@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -116,8 +117,8 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if meta.DurationSec > 600 {
-		http.Error(w, "video exceeds maximum duration of 10 minutes", http.StatusBadRequest)
+	if meta.DurationSec > maxTrackDuration {
+		http.Error(w, fmt.Sprintf("video exceeds maximum duration of %d seconds", maxTrackDuration), http.StatusBadRequest)
 		return
 	}
 

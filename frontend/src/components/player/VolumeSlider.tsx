@@ -20,6 +20,7 @@ export function VolumeSlider({ volume, onChange }: VolumeSliderProps) {
         max={100}
         value={volume}
         onChange={(e) => onChange(Number(e.target.value))}
+        aria-label="Volume"
         className="w-full h-1 bg-surface-container-high rounded-full appearance-none accent-on-surface-variant cursor-pointer"
       />
     </div>

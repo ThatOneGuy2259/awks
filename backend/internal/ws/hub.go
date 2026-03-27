@@ -10,13 +10,14 @@ import (
 )
 
 type Client struct {
-	Hub      *Hub
-	Conn     *websocket.Conn
-	Send     chan []byte
-	Done     chan struct{} // closed to signal WritePump to stop
-	UserID   string
-	Username string
-	Avatar   string
+	Hub          *Hub
+	Conn         *websocket.Conn
+	Send         chan []byte
+	Done         chan struct{} // closed to signal WritePump to stop
+	UserID       string
+	Username     string
+	Avatar       string
+	OnDisconnect func() // called when client disconnects
 }
 
 type Hub struct {
@@ -167,6 +168,9 @@ func (c *Client) WritePump() {
 
 func (c *Client) ReadPump(onMessage func(*Client, []byte)) {
 	defer func() {
+		if c.OnDisconnect != nil {
+			c.OnDisconnect()
+		}
 		c.Hub.Unregister(c)
 		c.Conn.Close()
 	}()

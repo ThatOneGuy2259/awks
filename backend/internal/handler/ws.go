@@ -95,6 +95,11 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 		Avatar:   avatar,
 	}
 
+	clientID := fmt.Sprintf("%p", client)
+	client.OnDisconnect = func() {
+		h.peerManager.RemoveClient(clientID)
+	}
+
 	h.hub.Register(client)
 
 	go client.WritePump()

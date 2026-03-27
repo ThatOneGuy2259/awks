@@ -16,6 +16,7 @@ import { useUserStore } from './stores/userStore';
 import { useThemeStore, applyTheme } from './stores/themeStore';
 import { getAllThemes } from './stores/customThemeStore';
 import { AwksLogo } from './components/AwksLogo';
+import { ToastContainer } from './components/ToastContainer';
 
 // Apply saved theme on module load (before React renders)
 const startupThemeId = useThemeStore.getState().currentTheme;
@@ -93,6 +94,7 @@ function AdminRoute() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ToastContainer />
       <SignedIn>
         <AuthenticatedApp />
       </SignedIn>

@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/auth"
@@ -62,6 +63,14 @@ func main() {
 	}
 	if _, err := pool.Exec(context.Background(), readMigration("005_queue_position_seq.up.sql")); err != nil {
 		log.Printf("migration 005 warning: %v", err)
+	}
+	if _, err := pool.Exec(context.Background(), readMigration("006_history_index.up.sql")); err != nil {
+		log.Printf("migration 006 warning: %v", err)
+	}
+
+	// Clean up expired timeouts
+	if _, err := pool.Exec(context.Background(), "DELETE FROM user_timeouts WHERE expires_at < now()"); err != nil {
+		log.Printf("timeout cleanup warning: %v", err)
 	}
 
 	// Redis
@@ -185,6 +194,7 @@ func main() {
 	// API routes with auth
 	r.Route("/api", func(r chi.Router) {
 		r.Use(auth.ClerkMiddleware(cfg.ClerkSecretKey))
+		r.Use(httprate.LimitByIP(60, time.Minute)) // 60 requests per minute per IP
 
 		r.Get("/queue", queueH.GetQueue)
 		r.Post("/queue", queueH.AddToQueue)

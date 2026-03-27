@@ -2,6 +2,7 @@ import type { SearchResult } from '../../lib/api';
 import { api } from '../../lib/api';
 import { useState } from 'react';
 import { formatTime } from '../../lib/formatTime';
+import { toast } from '../../stores/toastStore';
 
 interface TrackCardProps {
   track: SearchResult;
@@ -19,7 +20,7 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
       await api.addToQueue(`https://www.youtube.com/watch?v=${track.video_id}`);
       setRequested(true);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to request');
+      toast(err instanceof Error ? err.message : 'Failed to request');
     } finally {
       setRequesting(false);
     }

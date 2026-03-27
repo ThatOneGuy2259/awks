@@ -34,6 +34,7 @@ function BandSliders({ gains, onChange }: BandSlidersProps) {
               step="0.1"
               value={gains[i]}
               onChange={(e) => onChange(i, parseFloat(e.target.value))}
+              aria-label={`${band.label} gain`}
               className="appearance-none h-12 lg:h-16 w-1.5 rounded-full bg-surface-container-lowest cursor-pointer accent-primary"
               style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
             />

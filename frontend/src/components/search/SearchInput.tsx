@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../../lib/api';
 import { SearchSuggestions } from './SearchSuggestions';
 
+const SUGGEST_DEBOUNCE_MS = 250;
+
 interface SearchInputProps {
   value: string;
   onChange: (v: string) => void;
@@ -36,7 +38,7 @@ export function SearchInput({ value, onChange, onSubmit }: SearchInputProps) {
       } catch {
         // Aborted or failed — ignore
       }
-    }, 250);
+    }, SUGGEST_DEBOUNCE_MS);
   }, []);
 
   useEffect(() => {
