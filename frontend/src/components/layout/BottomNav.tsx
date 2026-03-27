@@ -14,16 +14,16 @@ export function BottomNav() {
   const tabs = isAdmin ? [...baseTabs, adminTab] : baseTabs;
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-8 pt-4 bg-[#25252d]/60 backdrop-blur-3xl rounded-t-[3rem] shadow-[0_-8px_30px_rgb(165,51,255,0.08)]">
+    <nav className="lg:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-6 pb-8 pt-4 bg-surface-container-highest/60 backdrop-blur-3xl rounded-t-[3rem] shadow-[0_-8px_30px_rgba(0,0,0,0.15)]">
       {tabs.map(({ to, icon, label, primary }) => (
         <NavLink
           key={to + label}
           to={to}
           className={({ isActive }) =>
             primary
-              ? 'flex flex-col items-center justify-center bg-purple-500 text-black rounded-full p-3 px-5 active:scale-110 transition-transform duration-300 shadow-xl shadow-purple-500/20'
-              : `flex flex-col items-center justify-center p-3 hover:text-cyan-400 transition-all ${
-                  isActive ? 'text-cyan-400' : 'text-gray-400'
+              ? 'flex flex-col items-center justify-center bg-primary text-on-primary-fixed rounded-full p-3 px-5 active:scale-110 transition-transform duration-300 shadow-xl shadow-primary/20'
+              : `flex flex-col items-center justify-center p-3 hover:text-secondary transition-all ${
+                  isActive ? 'text-secondary' : 'text-on-surface-variant'
                 }`
           }
         >

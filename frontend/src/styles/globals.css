@@ -98,15 +98,15 @@
   }
 
   .signature-gradient {
-    background: linear-gradient(135deg, #cf96ff 0%, #c683ff 100%);
+    background: var(--signature-gradient, linear-gradient(135deg, #cf96ff 0%, #c683ff 100%));
   }
 
   .neon-glow-primary {
-    box-shadow: 0 0 20px rgba(207, 150, 255, 0.2);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--color-primary) 20%, transparent);
   }
 
   .neon-glow-secondary {
-    box-shadow: 0 0 20px rgba(0, 244, 254, 0.2);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--color-secondary) 20%, transparent);
   }
 }
 

@@ -20,13 +20,13 @@ export function Sidebar({ listening }: SidebarProps) {
   const navItems = isAdmin ? [...baseNavItems, adminNavItem] : baseNavItems;
 
   return (
-    <aside className="fixed left-0 top-0 h-full w-64 border-r border-gray-800/20 bg-[#131319] hidden lg:flex flex-col py-8 z-40">
+    <aside className="fixed left-0 top-0 h-full w-64 border-r border-outline-variant/10 bg-surface-container-low hidden lg:flex flex-col py-8 z-40">
       <div className="px-6 mb-10 flex items-center gap-3">
         <div className="w-10 h-10 rounded-full signature-gradient flex items-center justify-center text-on-primary-fixed shadow-lg shadow-primary/20">
           <span className="material-symbols-outlined">graphic_eq</span>
         </div>
         <div>
-          <h2 className="text-xl font-bold text-purple-500 font-headline leading-tight">AWKS</h2>
+          <h2 className="text-xl font-bold text-primary font-headline leading-tight">AWKS</h2>
           <p className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold font-label">
             Fill the Awkward Silence
           </p>
@@ -41,8 +41,8 @@ export function Sidebar({ listening }: SidebarProps) {
             end={to === '/'}
             className={({ isActive }) =>
               isActive
-                ? 'bg-purple-500/10 text-purple-400 border-r-2 border-purple-500 px-4 py-3 flex items-center gap-3 font-body font-medium text-sm transition-all'
-                : 'text-gray-500 px-4 py-3 flex items-center gap-3 font-body font-medium text-sm hover:bg-white/5 hover:text-purple-300 transition-all'
+                ? 'bg-primary/10 text-primary border-r-2 border-primary px-4 py-3 flex items-center gap-3 font-body font-medium text-sm transition-all'
+                : 'text-on-surface-variant px-4 py-3 flex items-center gap-3 font-body font-medium text-sm hover:bg-white/5 hover:text-primary transition-all'
             }
           >
             <span className="material-symbols-outlined">{icon}</span>
@@ -59,13 +59,13 @@ export function Sidebar({ listening }: SidebarProps) {
           </div>
         )}
         <div className="pt-4 border-t border-outline-variant/10">
-          <a className="text-gray-500 px-4 py-2 flex items-center gap-3 text-xs hover:text-purple-300 transition-colors" href="#">
+          <a className="text-on-surface-variant px-4 py-2 flex items-center gap-3 text-xs hover:text-primary transition-colors" href="#">
             <span className="material-symbols-outlined">help</span>
             <span>Help</span>
           </a>
           <button
             onClick={() => signOut()}
-            className="text-gray-500 px-4 py-2 flex items-center gap-3 text-xs hover:text-purple-300 transition-colors w-full text-left"
+            className="text-on-surface-variant px-4 py-2 flex items-center gap-3 text-xs hover:text-primary transition-colors w-full text-left"
           >
             <span className="material-symbols-outlined">logout</span>
             <span>Logout</span>

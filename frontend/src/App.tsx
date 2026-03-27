@@ -43,7 +43,7 @@ function AuthenticatedApp() {
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0e0e13]">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <span className="material-symbols-outlined text-5xl text-primary animate-spin">progress_activity</span>
       </div>
     );
@@ -96,15 +96,15 @@ export default function App() {
         <AuthenticatedApp />
       </SignedIn>
       <SignedOut>
-        <div className="min-h-screen flex items-center justify-center bg-[#0e0e13]">
+        <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="text-center">
-            <h1 className="text-4xl font-black text-purple-500 font-headline mb-2 tracking-tighter">AWKS</h1>
+            <h1 className="text-4xl font-black text-primary font-headline mb-2 tracking-tighter">AWKS</h1>
             <p className="text-on-surface-variant text-sm font-body mb-8">The Neon Nocturne</p>
             <SignIn
               appearance={{
                 elements: {
                   rootBox: 'mx-auto',
-                  card: 'bg-surface-container-high border-none shadow-2xl shadow-purple-500/10',
+                  card: 'bg-surface-container-high border-none shadow-2xl shadow-primary/10',
                 },
               }}
             />
