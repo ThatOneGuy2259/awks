@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { wsSend, onWsMessage, offWsMessage } from './useWebSocket';
+import { useVisualizerStore, EQ_BANDS, sliderToDb } from '../stores/visualizerStore';
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -10,6 +11,9 @@ export function useWebRTC() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const filtersRef = useRef<BiquadFilterNode[]>([]);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const volumeRef = useRef(70);
   const connectedRef = useRef(false);
   const [volume, setVolumeState] = useState(() => {
@@ -45,23 +49,61 @@ export function useWebRTC() {
       audio.srcObject = event.streams[0];
       audio.volume = volumeRef.current / 100;
 
-      // Set up analyser — deferred until user gesture if needed
+      // Set up Web Audio graph: source → EQ filters → gain → analyser + destination
+      // Audio plays through the Web Audio API (not <audio>.srcObject) so EQ affects output
       const stream = event.streams[0];
       const setupAnalyser = () => {
-        if (analyserRef.current) return; // already set up
+        if (analyserRef.current) return;
         try {
           const ctx = new AudioContext();
+          audioCtxRef.current = ctx;
           const source = ctx.createMediaStreamSource(stream);
+
+          // Mute the <audio> element — we play through Web Audio instead
+          audio.volume = 0;
+
+          // EQ filter chain
+          const savedGains = useVisualizerStore.getState().audioGains;
+          const filters: BiquadFilterNode[] = [];
+          for (let i = 0; i < EQ_BANDS.length; i++) {
+            const band = EQ_BANDS[i];
+            const filter = ctx.createBiquadFilter();
+            filter.type = band.type;
+            filter.frequency.value = band.frequency;
+            filter.gain.value = sliderToDb(savedGains[i]);
+            if (band.type === 'peaking') {
+              filter.Q.value = 1.4;
+            }
+            filters.push(filter);
+          }
+
+          // Volume gain node
+          const gainNode = ctx.createGain();
+          gainNode.gain.value = volumeRef.current / 100;
+          gainNodeRef.current = gainNode;
+
+          // Analyser
           const analyser = ctx.createAnalyser();
           analyser.fftSize = 256;
-          analyser.smoothingTimeConstant = 0.4; // lower = more reactive
+          analyser.smoothingTimeConstant = 0.4;
           analyser.minDecibels = -80;
           analyser.maxDecibels = -10;
-          source.connect(analyser);
+
+          // Chain: source → filters → gain → analyser → destination
+          let node: AudioNode = source;
+          for (const filter of filters) {
+            node.connect(filter);
+            node = filter;
+          }
+          node.connect(gainNode);
+          gainNode.connect(analyser);
+          analyser.connect(ctx.destination);
+
           analyserRef.current = analyser;
-          console.log('[webrtc] analyser created, state:', ctx.state);
+          filtersRef.current = filters;
+          console.log('[webrtc] audio graph created: source → EQ → gain → analyser → output');
         } catch (e) {
-          console.warn('[webrtc] failed to create analyser:', e);
+          console.warn('[webrtc] failed to create audio graph:', e);
         }
       };
 
@@ -171,11 +213,25 @@ export function useWebRTC() {
     return () => clearTimeout(timer);
   }, [connect]);
 
+  // Subscribe to EQ band gain changes and update audio filters in real-time
+  useEffect(() => {
+    const unsub = useVisualizerStore.subscribe((state) => {
+      const filters = filtersRef.current;
+      if (filters.length === 0) return;
+      for (let i = 0; i < filters.length; i++) {
+        filters[i].gain.value = sliderToDb(state.audioGains[i]);
+      }
+    });
+    return unsub;
+  }, []);
+
   const setVolume = useCallback((vol: number) => {
     volumeRef.current = vol;
     setVolumeState(vol);
     localStorage.setItem('awks-volume', String(vol));
-    if (audioRef.current) {
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = vol / 100;
+    } else if (audioRef.current) {
       audioRef.current.volume = vol / 100;
     }
   }, []);

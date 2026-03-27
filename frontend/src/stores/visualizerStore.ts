@@ -3,34 +3,58 @@ import { create } from 'zustand';
 export type VisualizerOrientation = 'normal' | 'flipped';
 
 export const EQ_BANDS = [
-  { label: 'Sub', range: '0-60Hz' },
-  { label: 'Bass', range: '60-250Hz' },
-  { label: 'Low', range: '250-500Hz' },
-  { label: 'Mid', range: '500Hz-2k' },
-  { label: 'Upper', range: '2-4kHz' },
-  { label: 'Pres', range: '4-6kHz' },
-  { label: 'Brill', range: '6-10kHz' },
-  { label: 'Air', range: '10kHz+' },
+  { label: 'Sub', range: '0-60Hz', frequency: 32, type: 'lowshelf' as BiquadFilterType },
+  { label: 'Bass', range: '60-250Hz', frequency: 125, type: 'peaking' as BiquadFilterType },
+  { label: 'Low', range: '250-500Hz', frequency: 375, type: 'peaking' as BiquadFilterType },
+  { label: 'Mid', range: '500Hz-2k', frequency: 1000, type: 'peaking' as BiquadFilterType },
+  { label: 'Upper', range: '2-4kHz', frequency: 3000, type: 'peaking' as BiquadFilterType },
+  { label: 'Pres', range: '4-6kHz', frequency: 5000, type: 'peaking' as BiquadFilterType },
+  { label: 'Brill', range: '6-10kHz', frequency: 8000, type: 'peaking' as BiquadFilterType },
+  { label: 'Air', range: '10kHz+', frequency: 14000, type: 'highshelf' as BiquadFilterType },
 ] as const;
 
 export const BAND_COUNT = EQ_BANDS.length;
 
+/** Convert slider value (0-2) to dB gain (-12 to +12). 1.0 = 0dB (flat). */
+export function sliderToDb(value: number): number {
+  return (value - 1.0) * 12;
+}
+
 interface VisualizerState {
-  bandGains: number[];            // per-band gain, 0.0 to 2.0, default 1.0
+  // Audio EQ — affects actual sound output
+  audioGains: number[];
+  setAudioGain: (band: number, gain: number) => void;
+  resetAudioGains: () => void;
+  exportAudioEQ: () => string;
+  importAudioEQ: (encoded: string) => boolean;
+
+  // Visualizer sensitivity — affects visual display only
+  vizGains: number[];
+  setVizGain: (band: number, gain: number) => void;
+  resetVizGains: () => void;
+  exportVizEQ: () => string;
+  importVizEQ: (encoded: string) => boolean;
+
+  // Visualizer layout
   mirrored: boolean;
   orientation: VisualizerOrientation;
-  setBandGain: (band: number, gain: number) => void;
-  resetBandGains: () => void;
   setMirrored: (v: boolean) => void;
   setOrientation: (v: VisualizerOrientation) => void;
-  exportEQ: () => string;
-  importEQ: (encoded: string) => boolean;
 }
 
 const STORAGE_KEY = 'awks-visualizer';
 const DEFAULT_GAINS = Array(BAND_COUNT).fill(1.0) as number[];
 
-function loadState(): Partial<{ bandGains: number[]; mirrored: boolean; orientation: VisualizerOrientation }> {
+interface PersistedState {
+  audioGains?: number[];
+  vizGains?: number[];
+  mirrored?: boolean;
+  orientation?: VisualizerOrientation;
+  // legacy field
+  bandGains?: number[];
+}
+
+function loadState(): PersistedState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
@@ -40,56 +64,87 @@ function loadState(): Partial<{ bandGains: number[]; mirrored: boolean; orientat
   }
 }
 
-function persist(state: { bandGains: number[]; mirrored: boolean; orientation: VisualizerOrientation }) {
+function persistAll(state: { audioGains: number[]; vizGains: number[]; mirrored: boolean; orientation: VisualizerOrientation }) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // localStorage full
-  }
+  } catch {}
+}
+
+function getPersistedSnapshot(get: () => VisualizerState) {
+  const { audioGains, vizGains, mirrored, orientation } = get();
+  return { audioGains, vizGains, mirrored, orientation };
 }
 
 const saved = loadState();
 
+function validateGains(arr: unknown): arr is number[] {
+  return Array.isArray(arr) && arr.length === BAND_COUNT && arr.every((g) => typeof g === 'number' && g >= 0 && g <= 2);
+}
+
+// Migrate legacy: if bandGains exists but audioGains doesn't, use bandGains for both
+const initialAudio = validateGains(saved.audioGains) ? saved.audioGains : validateGains(saved.bandGains) ? saved.bandGains : [...DEFAULT_GAINS];
+const initialViz = validateGains(saved.vizGains) ? saved.vizGains : [...DEFAULT_GAINS];
+
 export const useVisualizerStore = create<VisualizerState>((set, get) => ({
-  bandGains: (saved.bandGains && saved.bandGains.length === BAND_COUNT) ? saved.bandGains : [...DEFAULT_GAINS],
+  audioGains: initialAudio,
+  vizGains: initialViz,
   mirrored: saved.mirrored ?? true,
   orientation: saved.orientation ?? 'normal',
 
-  setBandGain: (band, gain) => {
-    const bandGains = [...get().bandGains];
-    bandGains[band] = gain;
-    set({ bandGains });
-    persist({ ...get(), bandGains });
+  setAudioGain: (band, gain) => {
+    const audioGains = [...get().audioGains];
+    audioGains[band] = gain;
+    set({ audioGains });
+    persistAll({ ...getPersistedSnapshot(get), audioGains });
   },
 
-  resetBandGains: () => {
-    const bandGains = [...DEFAULT_GAINS];
-    set({ bandGains });
-    persist({ ...get(), bandGains });
+  resetAudioGains: () => {
+    const audioGains = [...DEFAULT_GAINS];
+    set({ audioGains });
+    persistAll({ ...getPersistedSnapshot(get), audioGains });
   },
 
-  setMirrored: (v) => { set({ mirrored: v }); persist({ ...get(), mirrored: v }); },
-  setOrientation: (v) => { set({ orientation: v }); persist({ ...get(), orientation: v }); },
+  exportAudioEQ: () => btoa(JSON.stringify({ type: 'audio-eq', gains: get().audioGains })),
 
-  exportEQ: () => {
-    const { bandGains, mirrored, orientation } = get();
-    return btoa(JSON.stringify({ bandGains, mirrored, orientation }));
-  },
-
-  importEQ: (encoded) => {
+  importAudioEQ: (encoded) => {
     try {
-      const json = atob(encoded.trim());
-      const data = JSON.parse(json);
-      if (!data.bandGains || !Array.isArray(data.bandGains) || data.bandGains.length !== BAND_COUNT) return false;
-      if (!data.bandGains.every((g: unknown) => typeof g === 'number' && g >= 0 && g <= 2)) return false;
-      const bandGains = data.bandGains as number[];
+      const data = JSON.parse(atob(encoded.trim()));
+      if (!validateGains(data.gains)) return false;
+      const audioGains = data.gains;
+      set({ audioGains });
+      persistAll({ ...getPersistedSnapshot(get), audioGains });
+      return true;
+    } catch { return false; }
+  },
+
+  setVizGain: (band, gain) => {
+    const vizGains = [...get().vizGains];
+    vizGains[band] = gain;
+    set({ vizGains });
+    persistAll({ ...getPersistedSnapshot(get), vizGains });
+  },
+
+  resetVizGains: () => {
+    const vizGains = [...DEFAULT_GAINS];
+    set({ vizGains });
+    persistAll({ ...getPersistedSnapshot(get), vizGains });
+  },
+
+  exportVizEQ: () => btoa(JSON.stringify({ type: 'viz-eq', gains: get().vizGains, mirrored: get().mirrored, orientation: get().orientation })),
+
+  importVizEQ: (encoded) => {
+    try {
+      const data = JSON.parse(atob(encoded.trim()));
+      if (!validateGains(data.gains)) return false;
+      const vizGains = data.gains;
       const mirrored = typeof data.mirrored === 'boolean' ? data.mirrored : get().mirrored;
       const orientation = (data.orientation === 'normal' || data.orientation === 'flipped') ? data.orientation : get().orientation;
-      set({ bandGains, mirrored, orientation });
-      persist({ bandGains, mirrored, orientation });
+      set({ vizGains, mirrored, orientation });
+      persistAll({ ...getPersistedSnapshot(get), vizGains, mirrored, orientation });
       return true;
-    } catch {
-      return false;
-    }
+    } catch { return false; }
   },
+
+  setMirrored: (v) => { set({ mirrored: v }); persistAll({ ...getPersistedSnapshot(get), mirrored: v }); },
+  setOrientation: (v) => { set({ orientation: v }); persistAll({ ...getPersistedSnapshot(get), orientation: v }); },
 }));

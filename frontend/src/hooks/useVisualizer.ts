@@ -10,7 +10,7 @@ export function useVisualizer(
   const animFrameRef = useRef<number>(0);
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
   const currentTheme = useThemeStore((s) => s.currentTheme);
-  const bandGains = useVisualizerStore((s) => s.bandGains);
+  const vizGains = useVisualizerStore((s) => s.vizGains);
   const mirrored = useVisualizerStore((s) => s.mirrored);
   const orientation = useVisualizerStore((s) => s.orientation);
 
@@ -116,7 +116,7 @@ export function useVisualizer(
       const maxReflectionHeight = h - baseline;
 
       // Read current band gains from store (read once per frame for consistency)
-      const gains = bandGains;
+      const gains = vizGains;
 
       for (let i = 0; i < barCount; i++) {
         const mapping = binMappings[i];
@@ -185,7 +185,7 @@ export function useVisualizer(
 
     draw();
     return () => cancelAnimationFrame(animFrameRef.current);
-  }, [canvas, analyserRef, currentTheme, bandGains, mirrored, orientation]);
+  }, [canvas, analyserRef, currentTheme, vizGains, mirrored, orientation]);
 
   return canvasRef;
 }

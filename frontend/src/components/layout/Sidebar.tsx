@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
 import { useUserStore } from '../../stores/userStore';
 import { AwksLogo } from '../AwksLogo';
+import { HelpModal } from '../HelpModal';
 
 const baseNavItems = [
   { to: '/', icon: 'graphic_eq', label: 'Now Playing' },
@@ -18,9 +20,11 @@ interface SidebarProps {
 export function Sidebar({ listening }: SidebarProps) {
   const { signOut } = useClerk();
   const isAdmin = useUserStore((s) => s.role === 'admin');
+  const [showHelp, setShowHelp] = useState(false);
   const navItems = isAdmin ? [...baseNavItems, adminNavItem] : baseNavItems;
 
   return (
+    <>
     <aside className="fixed left-0 top-0 h-full w-64 border-r border-outline-variant/10 bg-surface-container-low hidden lg:flex flex-col py-8 z-40">
       <div className="px-6 mb-10">
         <AwksLogo className="h-8 w-auto mb-1" />
@@ -55,10 +59,13 @@ export function Sidebar({ listening }: SidebarProps) {
           </div>
         )}
         <div className="pt-4 border-t border-outline-variant/10">
-          <a className="text-on-surface-variant px-4 py-2 flex items-center gap-3 text-xs hover:text-primary transition-colors" href="#">
+          <button
+            onClick={() => setShowHelp(true)}
+            className="text-on-surface-variant px-4 py-2 flex items-center gap-3 text-xs hover:text-primary transition-colors w-full text-left"
+          >
             <span className="material-symbols-outlined">help</span>
             <span>Help</span>
-          </a>
+          </button>
           <button
             onClick={() => signOut()}
             className="text-on-surface-variant px-4 py-2 flex items-center gap-3 text-xs hover:text-primary transition-colors w-full text-left"
@@ -69,5 +76,7 @@ export function Sidebar({ listening }: SidebarProps) {
         </div>
       </div>
     </aside>
+    {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+    </>
   );
 }
