@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -211,6 +213,26 @@ func main() {
 			r.Delete("/history", historyH.ClearAll)
 		})
 	})
+
+	// Serve frontend static files (SPA catch-all)
+	if cfg.StaticDir != "" {
+		staticDir := http.Dir(cfg.StaticDir)
+		r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+			// Try serving the exact file first
+			path := strings.TrimPrefix(r.URL.Path, "/")
+			if path == "" {
+				path = "index.html"
+			}
+			fullPath := filepath.Join(cfg.StaticDir, path)
+			if _, err := os.Stat(fullPath); err == nil {
+				http.FileServer(staticDir).ServeHTTP(w, r)
+				return
+			}
+			// SPA fallback: serve index.html for client-side routes
+			http.ServeFile(w, r, filepath.Join(cfg.StaticDir, "index.html"))
+		})
+		log.Printf("Serving frontend from %s", cfg.StaticDir)
+	}
 
 	// Serve
 	srv := &http.Server{

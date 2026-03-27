@@ -18,6 +18,7 @@ type Config struct {
 	AudioCacheDir  string
 	YtdlpPath      string
 	ICEServers     []webrtc.ICEServer
+	StaticDir      string
 }
 
 func Load() *Config {
@@ -35,6 +36,7 @@ func Load() *Config {
 		AudioCacheDir:  getEnv("AUDIO_CACHE_DIR", "./audio-cache"),
 		YtdlpPath:      getEnv("YTDLP_PATH", "yt-dlp"),
 		ICEServers:     iceServers,
+		StaticDir:      getEnv("STATIC_DIR", ""),
 	}
 }
 
