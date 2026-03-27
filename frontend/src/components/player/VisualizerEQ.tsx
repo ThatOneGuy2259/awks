@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useVisualizerStore, EQ_BANDS, BAND_COUNT, type VisualizerOrientation } from '../../stores/visualizerStore';
+import { useVisualizerStore, EQ_BANDS, type VisualizerOrientation } from '../../stores/visualizerStore';
 
 interface VisualizerEQProps {
   onClose: () => void;

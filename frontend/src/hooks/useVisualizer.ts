@@ -34,7 +34,6 @@ export function useVisualizer(
     let dataArray: Uint8Array<ArrayBuffer> | null = null;
 
     const barCount = 128;
-    const barsPerBand = barCount / BAND_COUNT; // 16 bars per EQ band
     const binMappings: Array<{ start: number; end: number }> = [];
 
     const satDelta = secondaryHSL.s - primaryHSL.s;
