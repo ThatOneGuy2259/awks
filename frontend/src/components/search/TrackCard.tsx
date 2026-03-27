@@ -1,6 +1,7 @@
 import type { SearchResult } from '../../lib/api';
 import { api } from '../../lib/api';
 import { useState } from 'react';
+import { formatTime } from '../../lib/formatTime';
 
 interface TrackCardProps {
   track: SearchResult;
@@ -38,6 +39,11 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
               play_arrow
             </span>
           </div>
+          {track.duration_sec > 0 && (
+            <span className="absolute bottom-1.5 right-1.5 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+              {formatTime(track.duration_sec)}
+            </span>
+          )}
         </div>
         <div className="flex-grow">
           <span className="bg-secondary/10 text-secondary text-[10px] font-bold px-2 py-1 rounded uppercase tracking-tighter mb-2 inline-block">
@@ -65,11 +71,18 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
 
   return (
     <div className="bg-surface-container p-6 rounded-xl border border-outline-variant/10 group">
-      <img
-        className="w-full aspect-square object-cover rounded-lg mb-4 grayscale group-hover:grayscale-0 transition-all duration-500"
-        src={track.thumbnail_url}
-        alt={track.title}
-      />
+      <div className="relative mb-4">
+        <img
+          className="w-full aspect-square object-cover rounded-lg grayscale group-hover:grayscale-0 transition-all duration-500"
+          src={track.thumbnail_url}
+          alt={track.title}
+        />
+        {track.duration_sec > 0 && (
+          <span className="absolute bottom-1.5 right-1.5 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+            {formatTime(track.duration_sec)}
+          </span>
+        )}
+      </div>
       <div className="flex justify-between items-start">
         <div className="min-w-0 flex-1">
           <h4 className="font-bold text-on-surface truncate">{track.title}</h4>
