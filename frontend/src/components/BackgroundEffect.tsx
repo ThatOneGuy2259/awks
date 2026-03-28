@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
-import { useVisualizerStore, type BackgroundEffect as BgEffect, type VisualizerOrientation } from '../stores/visualizerStore';
+import { useVisualizerStore, type VisualizerOrientation } from '../stores/visualizerStore';
 import { BeatDetector } from '../lib/beatDetector';
 import { barHeights, barColors } from '../hooks/useVisualizer';
 
@@ -115,7 +115,7 @@ interface Particle {
   x: number; y: number; vx: number; vy: number; size: number; color: string; life: number;
 }
 
-function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _freq: ReturnType<typeof getFrequencyData>, particles: Particle[], colors: ReturnType<typeof getThemeColors>, gain: number, _beat: BeatDetector, analyserRef: AnalyserNode | null, mirrored: boolean, orientation: VisualizerOrientation) {
+function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _freq: ReturnType<typeof getFrequencyData>, particles: Particle[], colors: ReturnType<typeof getThemeColors>, gain: number, _beat: BeatDetector, _analyserRef: AnalyserNode | null, mirrored: boolean, orientation: VisualizerOrientation) {
   ctx.clearRect(0, 0, w, h);
 
   // Spawn particles from visualizer bar tops using shared barHeights
@@ -136,7 +136,6 @@ function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _fre
     // Only spawn probabilistically — higher bars have higher chance
     if (Math.random() > value * 0.3 * gain) continue;
 
-    const t = i / barCount;
     const barHeight = value * vizMaxBarHeight;
     const spawnY = vizBaseline - barHeight;
 
