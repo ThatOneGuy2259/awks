@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
@@ -95,6 +95,99 @@ function AdminRoute() {
   return <AdminDashboardView />;
 }
 
+function GoogleOnlyLogin() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center">
+        <AwksLogo className="h-14 w-auto mx-auto mb-2" />
+        <p className="text-on-surface-variant text-xs font-label uppercase tracking-widest mb-8">Fill the Awkward Silence</p>
+        <SignIn
+          appearance={{
+            elements: {
+              rootBox: 'mx-auto',
+              card: { backgroundColor: 'transparent', boxShadow: 'none', border: 'none' },
+              socialButtonsBlockButton: {
+                backgroundColor: 'var(--color-surface-container-high)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '9999px',
+                padding: '12px 32px',
+              },
+              socialButtonsBlockButtonText: { color: 'var(--color-on-surface)', fontWeight: '600' },
+              headerTitle: { display: 'none' },
+              headerSubtitle: { display: 'none' },
+              dividerRow: { display: 'none' },
+              formFieldRow: { display: 'none' },
+              formButtonPrimary: { display: 'none' },
+              identityPreview: { display: 'none' },
+              alternativeMethods: { display: 'none' },
+              backLink: { display: 'none' },
+              footer: { display: 'none' },
+              footerAction: { display: 'none' },
+            },
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FullLogin() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="text-center">
+        <AwksLogo className="h-14 w-auto mx-auto mb-2" />
+        <p className="text-on-surface-variant text-xs font-label uppercase tracking-widest mb-8">Fill the Awkward Silence</p>
+        <SignIn
+          appearance={{
+            elements: {
+              rootBox: 'mx-auto',
+              card: {
+                backgroundColor: 'var(--color-surface-container-high)',
+                border: '1px solid rgba(255,255,255,0.05)',
+                borderRadius: '1rem',
+                boxShadow: '0 25px 50px -12px rgba(0,0,0,0.4)',
+              },
+              socialButtonsBlockButton: {
+                backgroundColor: 'var(--color-surface-container)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '9999px',
+              },
+              socialButtonsBlockButtonText: { color: 'var(--color-on-surface)' },
+              formFieldInput: {
+                backgroundColor: 'var(--color-surface-container-low)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'var(--color-on-surface)',
+                borderRadius: '0.75rem',
+              },
+              formFieldLabel: { color: 'var(--color-on-surface-variant)' },
+              formButtonPrimary: {
+                background: 'var(--signature-gradient)',
+                borderRadius: '9999px',
+                fontWeight: '700',
+              },
+              headerTitle: { color: 'var(--color-on-surface)' },
+              headerSubtitle: { color: 'var(--color-on-surface-variant)' },
+              dividerLine: { borderColor: 'rgba(255,255,255,0.1)' },
+              dividerText: { color: 'var(--color-on-surface-variant)' },
+              footerActionLink: { color: 'var(--color-primary)' },
+              footer: { display: 'none' },
+            },
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function LoginRouter() {
+  const location = useLocation();
+
+  if (location.pathname === '/login/credentials') {
+    return <FullLogin />;
+  }
+  return <GoogleOnlyLogin />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -103,20 +196,7 @@ export default function App() {
         <AuthenticatedApp />
       </SignedIn>
       <SignedOut>
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="text-center">
-            <AwksLogo className="h-14 w-auto mx-auto mb-2" />
-            <p className="text-on-surface-variant text-sm font-body mb-8">The Neon Nocturne</p>
-            <SignIn
-              appearance={{
-                elements: {
-                  rootBox: 'mx-auto',
-                  card: 'bg-surface-container-high border-none shadow-2xl shadow-primary/10',
-                },
-              }}
-            />
-          </div>
-        </div>
+        <LoginRouter />
       </SignedOut>
     </BrowserRouter>
   );
