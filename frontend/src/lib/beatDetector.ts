@@ -100,21 +100,27 @@ export class BeatDetector {
       this.prevSpectrum[i] = data[i] / 255;
     }
 
-    // ── Kick detection: bass impact OR (bass flux + high flux co-occurrence) ──
+    // ── Kick detection: any significant bass activity ──
     const bassImpact = this.bass.impact;
-    const hasTransientClick = highFlux > 0.05;
-    const hasBassSpike = bassImpact > 0.3 || bassFlux > 0.04;
-    const isKick = (hasBassSpike && hasTransientClick) || bassImpact > 0.6;
+    const midImpact = this.mid.impact;
+    const highImpact = this.high.impact;
+
+    // Multiple ways to trigger a kick — any one is enough
+    const isKick = bassImpact > 0.15       // bass band spiking above its own average
+      || bassFlux > 0.02                    // any positive change in bass bins
+      || (midImpact > 0.2 && bassFlux > 0.01); // mid spike with some bass movement
 
     if (isKick && (now - this.lastKickTime) > MIN_KICK_INTERVAL) {
       this.lastKickTime = now;
-      this.kickIntensity = Math.min(1.0, 0.4 + bassImpact * 0.6);
+      // Scale intensity by how strong the trigger was
+      const strength = Math.max(bassImpact, bassFlux * 10, midImpact * 0.5);
+      this.kickIntensity = Math.min(1.0, 0.3 + strength * 0.7);
     }
 
     // ── Onset: any band spiking ──
-    const totalImpact = bassImpact + this.mid.impact + this.high.impact;
-    if (totalImpact > 0.5) {
-      this.onsetIntensity = Math.min(1.0, totalImpact * 0.5);
+    const totalImpact = bassImpact + midImpact + highImpact;
+    if (totalImpact > 0.3) {
+      this.onsetIntensity = Math.min(1.0, totalImpact * 0.6);
     }
 
     // ── Decay ──

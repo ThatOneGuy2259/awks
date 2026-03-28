@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
-import { useVisualizerStore, type BackgroundEffect as BgEffect } from '../stores/visualizerStore';
+import { useVisualizerStore, type BackgroundEffect as BgEffect, type VisualizerOrientation } from '../stores/visualizerStore';
 import { BeatDetector } from '../lib/beatDetector';
 
 interface BackgroundEffectProps {
@@ -114,38 +114,64 @@ interface Particle {
   x: number; y: number; vx: number; vy: number; size: number; color: string; life: number;
 }
 
-function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, freq: ReturnType<typeof getFrequencyData>, particles: Particle[], colors: ReturnType<typeof getThemeColors>, gain: number, beat: BeatDetector) {
+function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _freq: ReturnType<typeof getFrequencyData>, particles: Particle[], colors: ReturnType<typeof getThemeColors>, gain: number, _beat: BeatDetector, analyserRef: AnalyserNode | null, mirrored: boolean, orientation: VisualizerOrientation) {
   ctx.clearRect(0, 0, w, h);
 
-  // Ambient — steady stream of small particles
-  const ambientCount = Math.floor(1 + freq.overall * 4 * gain);
-  for (let i = 0; i < ambientCount; i++) {
-    const colorPick = [colors.primary, colors.secondary, colors.tertiary][Math.floor(Math.random() * 3)];
-    particles.push({
-      x: Math.random() * w,
-      y: h + 5,
-      vx: (Math.random() - 0.5) * 1,
-      vy: -(0.5 + Math.random() * 1.5),
-      size: 1 + Math.random() * 1.5,
-      color: colorPick,
-      life: 1.0,
-    });
-  }
+  // Get raw frequency data for per-bin particle spawning
+  if (analyserRef) {
+    const rawData = new Uint8Array(analyserRef.frequencyBinCount);
+    analyserRef.getByteFrequencyData(rawData);
+    const bins = rawData.length;
+    const usableBins = Math.floor(bins * 0.6);
+    const centerX = w / 2;
 
-  // Kick burst — faster, slightly larger particles that stand out from ambient
-  if (beat.kickIntensity > 0.15) {
-    const burstCount = Math.floor(beat.kickIntensity * 30 * gain);
-    for (let i = 0; i < burstCount; i++) {
-      const colorPick = [colors.primary, colors.secondary, colors.tertiary][Math.floor(Math.random() * 3)];
-      particles.push({
-        x: Math.random() * w,
-        y: h + 5,
-        vx: (Math.random() - 0.5) * 2.5 * gain,
-        vy: -(3 + Math.random() * 4 + beat.kickIntensity * 4) * gain,
-        size: (1.5 + Math.random() * 2) * Math.min(gain, 1.5),
-        color: colorPick,
-        life: 1.0,
-      });
+    for (let i = 0; i < usableBins; i++) {
+      const energy = rawData[i] / 255;
+      if (energy < 0.3) continue;
+
+      const spawnChance = (energy - 0.3) * 2.5 * gain;
+      if (Math.random() > spawnChance) continue;
+
+      // t = 0 is low freq, t = 1 is high freq
+      const t = i / usableBins;
+
+      // Color based on frequency band
+      let color: string;
+      if (t < 0.33) color = colors.primary;
+      else if (t < 0.66) color = colors.secondary;
+      else color = colors.tertiary;
+
+      const speed = (1 + energy * 4) * gain;
+      const size = (0.8 + energy * 2) * Math.min(gain, 1.5);
+
+      // Calculate positions based on visualizer layout
+      // Account for sidebar (256px / 16rem on lg screens)
+      const contentLeft = w > 1024 ? 256 : 0;
+      const contentW = w - contentLeft;
+      const contentCenter = contentLeft + contentW / 2;
+
+      const positions: number[] = [];
+      if (mirrored) {
+        const pos = orientation === 'flipped' ? (1 - t) : t;
+        const halfW = contentW / 2;
+        positions.push(contentCenter - pos * halfW);
+        positions.push(contentCenter + pos * halfW);
+      } else {
+        const x = orientation === 'flipped' ? contentLeft + (1 - t) * contentW : contentLeft + t * contentW;
+        positions.push(x);
+      }
+
+      for (const px of positions) {
+        particles.push({
+          x: px + (Math.random() - 0.5) * 20,
+          y: h + 5,
+          vx: (Math.random() - 0.5) * 1.5,
+          vy: -speed,
+          size,
+          color,
+          life: 0.6 + energy * 0.4,
+        });
+      }
     }
   }
 
@@ -238,7 +264,8 @@ export function BackgroundEffectCanvas({ analyserRef }: BackgroundEffectProps) {
           drawAmbientBlobs(ctx, w, h, freq, blobsRef.current, gain, beat);
           break;
         case 'particles':
-          drawParticles(ctx, w, h, freq, particlesRef.current, colors, gain, beat);
+          drawParticles(ctx, w, h, freq, particlesRef.current, colors, gain, beat, analyserRef.current,
+            useVisualizerStore.getState().mirrored, useVisualizerStore.getState().orientation);
           break;
       }
     };
