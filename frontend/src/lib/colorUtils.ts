@@ -51,32 +51,37 @@ function darken(hex: string, amount: number): string {
 export interface CustomThemeInput {
   name: string;
   background: string;
+  surface?: string;   // optional — defaults to background if not set
   primary: string;
   secondary: string;
+  tertiary?: string;  // optional — defaults to derived from primary if not set
   forkedFrom: string;
 }
 
 export function deriveTheme(id: string, input: CustomThemeInput): ThemeDefinition {
   const { background, primary, secondary } = input;
+  const surface = input.surface || background;
+  const tertiary = input.tertiary || mixHex(primary, secondary, 0.5);
 
   const primaryDim = darken(primary, 0.35);
   const secondaryDim = darken(secondary, 0.35);
+  const tertiaryDim = darken(tertiary, 0.35);
   const onPrimary = darken(primary, 0.7);
-  const outlineVariant = lighten(background, 0.25);
+  const outlineVariant = lighten(surface, 0.25);
 
   const vars: Record<string, string> = {
     '--color-background': background,
-    '--color-surface': background,
-    '--color-surface-dim': darken(background, 0.1),
-    '--color-surface-bright': lighten(background, 0.2),
-    '--color-surface-container-lowest': darken(background, 0.2),
-    '--color-surface-container-low': lighten(background, 0.03),
-    '--color-surface-container': lighten(background, 0.06),
-    '--color-surface-container-high': lighten(background, 0.09),
-    '--color-surface-container-highest': lighten(background, 0.12),
-    '--color-surface-variant': lighten(background, 0.12),
-    '--color-on-surface': lighten(background, 0.92),
-    '--color-on-surface-variant': lighten(background, 0.6),
+    '--color-surface': surface,
+    '--color-surface-dim': darken(surface, 0.1),
+    '--color-surface-bright': lighten(surface, 0.2),
+    '--color-surface-container-lowest': darken(surface, 0.2),
+    '--color-surface-container-low': lighten(surface, 0.03),
+    '--color-surface-container': lighten(surface, 0.06),
+    '--color-surface-container-high': lighten(surface, 0.09),
+    '--color-surface-container-highest': lighten(surface, 0.12),
+    '--color-surface-variant': lighten(surface, 0.12),
+    '--color-on-surface': lighten(surface, 0.92),
+    '--color-on-surface-variant': lighten(surface, 0.6),
     '--color-primary': primary,
     '--color-primary-dim': primaryDim,
     '--color-primary-container': primaryDim,
@@ -84,6 +89,9 @@ export function deriveTheme(id: string, input: CustomThemeInput): ThemeDefinitio
     '--color-secondary': secondary,
     '--color-secondary-dim': secondaryDim,
     '--color-secondary-container': darken(secondary, 0.55),
+    '--color-tertiary': tertiary,
+    '--color-tertiary-dim': tertiaryDim,
+    '--color-tertiary-container': darken(tertiary, 0.55),
     '--color-on-primary': onPrimary,
     '--color-on-primary-fixed': '#000000',
     '--color-outline-variant': outlineVariant,

@@ -18,6 +18,7 @@ import { getAllThemes } from './stores/customThemeStore';
 import { AwksLogo } from './components/AwksLogo';
 import { ToastContainer } from './components/ToastContainer';
 import { ConnectionBanner } from './components/ConnectionBanner';
+import { BackgroundEffectCanvas } from './components/BackgroundEffect';
 
 // Apply saved theme on module load (before React renders)
 const startupThemeId = useThemeStore.getState().currentTheme;
@@ -61,11 +62,12 @@ function AppContent() {
 
   return (
     <>
+      <BackgroundEffectCanvas analyserRef={analyserRef} />
       <TopBar />
       <Sidebar listening={listening} />
       <ConnectionBanner />
 
-      <main className="lg:pl-64 pt-20 pb-32 min-h-screen">
+      <main className="lg:pl-64 pt-20 pb-32 min-h-screen relative z-[2]">
         <Routes>
           <Route path="/" element={<MusicQueueView />} />
           <Route path="/search" element={<SearchRequestView />} />

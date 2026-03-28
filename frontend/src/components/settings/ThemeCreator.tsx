@@ -45,13 +45,19 @@ export function ThemeCreator({ onClose, editId, editInput }: ThemeCreatorProps) 
   const defaultFork = themes[0];
   const [name, setName] = useState(editInput?.name ?? '');
   const [background, setBackground] = useState(editInput?.background ?? defaultFork.preview.bg);
+  const [surface, setSurface] = useState(editInput?.surface ?? '');
   const [primary, setPrimary] = useState(editInput?.primary ?? defaultFork.preview.primary);
   const [secondary, setSecondary] = useState(editInput?.secondary ?? defaultFork.preview.secondary);
+  const [tertiary, setTertiary] = useState(editInput?.tertiary ?? '');
   const [forkedFrom, setForkedFrom] = useState(editInput?.forkedFrom ?? defaultFork.id);
 
   const derived = useMemo(
-    () => deriveTheme('preview', { name: name || 'Preview', background, primary, secondary, forkedFrom }),
-    [name, background, primary, secondary, forkedFrom],
+    () => deriveTheme('preview', {
+      name: name || 'Preview', background, primary, secondary, forkedFrom,
+      surface: surface || undefined,
+      tertiary: tertiary || undefined,
+    }),
+    [name, background, surface, primary, secondary, tertiary, forkedFrom],
   );
 
   const handleForkChange = (themeId: string) => {
@@ -59,13 +65,19 @@ export function ThemeCreator({ onClose, editId, editInput }: ThemeCreatorProps) 
     if (!t) return;
     setForkedFrom(themeId);
     setBackground(t.preview.bg);
+    setSurface('');
     setPrimary(t.preview.primary);
     setSecondary(t.preview.secondary);
+    setTertiary('');
   };
 
   const handleSave = () => {
     if (!name.trim()) return;
-    const input: CustomThemeInput = { name: name.trim(), background, primary, secondary, forkedFrom };
+    const input: CustomThemeInput = {
+      name: name.trim(), background, primary, secondary, forkedFrom,
+      surface: surface || undefined,
+      tertiary: tertiary || undefined,
+    };
     const id = saveTheme(input, editId);
     const saved = getAllThemes().find((t) => t.id === id);
     if (saved) {
@@ -130,8 +142,10 @@ export function ThemeCreator({ onClose, editId, editInput }: ThemeCreatorProps) 
               </label>
               <div className="space-y-3">
                 <ColorRow label="Background" value={background} onChange={setBackground} />
+                <ColorRow label="Surface" value={surface || background} onChange={setSurface} />
                 <ColorRow label="Primary" value={primary} onChange={setPrimary} />
                 <ColorRow label="Secondary" value={secondary} onChange={setSecondary} />
+                <ColorRow label="Tertiary" value={tertiary || derived.vars['--color-tertiary']} onChange={setTertiary} />
               </div>
             </div>
 
@@ -182,6 +196,28 @@ export function ThemeCreator({ onClose, editId, editInput }: ThemeCreatorProps) 
               >
                 Sample Button
               </button>
+
+              {/* Tertiary accent sample */}
+              <div className="flex gap-2">
+                <span
+                  className="px-3 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: derived.vars['--color-tertiary'] + '1a',
+                    color: derived.vars['--color-tertiary'],
+                  }}
+                >
+                  Tertiary Tag
+                </span>
+                <span
+                  className="px-3 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    backgroundColor: derived.vars['--color-secondary'] + '1a',
+                    color: derived.vars['--color-secondary'],
+                  }}
+                >
+                  Secondary Tag
+                </span>
+              </div>
 
               <div
                 className="rounded-lg p-3 border"

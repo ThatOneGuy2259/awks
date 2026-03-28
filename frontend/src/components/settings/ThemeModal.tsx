@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { themes, useThemeStore, applyTheme, type ThemeDefinition } from '../../stores/themeStore';
 import { useCustomThemeStore } from '../../stores/customThemeStore';
+import { useVisualizerStore, type BackgroundEffect } from '../../stores/visualizerStore';
 import { ThemeCreator } from './ThemeCreator';
 import type { CustomThemeInput } from '../../lib/colorUtils';
 
@@ -8,9 +9,18 @@ interface ThemeModalProps {
   onClose: () => void;
 }
 
+const BG_EFFECTS: { value: BackgroundEffect; label: string; icon: string }[] = [
+  { value: 'none', label: 'None', icon: 'block' },
+  { value: 'color-pulse', label: 'Color Pulse', icon: 'favorite' },
+  { value: 'gradient-wave', label: 'Gradient Wave', icon: 'waves' },
+  { value: 'ambient-blobs', label: 'Ambient Blobs', icon: 'blur_on' },
+  { value: 'particles', label: 'Particles', icon: 'auto_awesome' },
+];
+
 export function ThemeModal({ onClose }: ThemeModalProps) {
   const { currentTheme, setTheme } = useThemeStore();
   const { customThemes, deleteTheme, exportTheme, importTheme } = useCustomThemeStore();
+  const { backgroundEffect, backgroundIntensity, setBackgroundEffect, setBackgroundIntensity } = useVisualizerStore();
 
   const [showCreator, setShowCreator] = useState(false);
   const [editTarget, setEditTarget] = useState<{ id: string; input: CustomThemeInput } | null>(null);
@@ -105,9 +115,9 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       <div
-        className="relative bg-surface-container-high rounded-2xl p-6 w-full max-w-md mx-4 border border-outline-variant/10 max-h-[85vh] overflow-y-auto"
+        className="relative bg-surface-container-high rounded-2xl p-6 w-full max-w-lg mx-4 border border-outline-variant/10 max-h-[85vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-6">
@@ -201,6 +211,44 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Background Effects */}
+        <div className="mt-8">
+          <h3 className="text-sm font-bold text-on-surface-variant uppercase tracking-widest mb-4">Background Effect</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {BG_EFFECTS.map((fx) => (
+              <button
+                key={fx.value}
+                onClick={() => setBackgroundEffect(fx.value)}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  backgroundEffect === fx.value
+                    ? 'bg-primary/10 text-primary border border-primary/30'
+                    : 'bg-surface-container-lowest text-on-surface-variant border border-transparent hover:bg-white/5'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">{fx.icon}</span>
+                {fx.label}
+              </button>
+            ))}
+          </div>
+          {backgroundEffect !== 'none' && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-on-surface-variant">Intensity</span>
+                <span className="text-xs text-on-surface-variant font-mono">{Math.round(backgroundIntensity * 100)}%</span>
+              </div>
+              <input
+                type="range"
+                min="0.05"
+                max="2.0"
+                step="0.05"
+                value={backgroundIntensity}
+                onChange={(e) => setBackgroundIntensity(parseFloat(e.target.value))}
+                className="w-full accent-primary h-1.5 rounded-full appearance-none bg-surface-container-lowest cursor-pointer"
+              />
+            </div>
+          )}
         </div>
 
       </div>

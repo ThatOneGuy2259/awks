@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export type VisualizerOrientation = 'normal' | 'flipped';
+export type BackgroundEffect = 'none' | 'color-pulse' | 'gradient-wave' | 'ambient-blobs' | 'particles';
 
 export const EQ_BANDS = [
   { label: 'Sub', range: '0-60Hz', frequency: 32, type: 'lowshelf' as BiquadFilterType },
@@ -40,6 +41,12 @@ interface VisualizerState {
   orientation: VisualizerOrientation;
   setMirrored: (v: boolean) => void;
   setOrientation: (v: VisualizerOrientation) => void;
+
+  // Background effect
+  backgroundEffect: BackgroundEffect;
+  backgroundIntensity: number; // 0.0 to 1.0, default 0.7
+  setBackgroundEffect: (v: BackgroundEffect) => void;
+  setBackgroundIntensity: (v: number) => void;
 }
 
 const STORAGE_KEY = 'awks-visualizer';
@@ -50,6 +57,8 @@ interface PersistedState {
   vizGains?: number[];
   mirrored?: boolean;
   orientation?: VisualizerOrientation;
+  backgroundEffect?: BackgroundEffect;
+  backgroundIntensity?: number;
   // legacy field
   bandGains?: number[];
 }
@@ -64,15 +73,15 @@ function loadState(): PersistedState {
   }
 }
 
-function persistAll(state: { audioGains: number[]; vizGains: number[]; mirrored: boolean; orientation: VisualizerOrientation }) {
+function persistAll(state: { audioGains: number[]; vizGains: number[]; mirrored: boolean; orientation: VisualizerOrientation; backgroundEffect: BackgroundEffect; backgroundIntensity: number }) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {}
 }
 
 function getPersistedSnapshot(get: () => VisualizerState) {
-  const { audioGains, vizGains, mirrored, orientation } = get();
-  return { audioGains, vizGains, mirrored, orientation };
+  const { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity } = get();
+  return { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity };
 }
 
 const saved = loadState();
@@ -90,6 +99,8 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
   vizGains: initialViz,
   mirrored: saved.mirrored ?? true,
   orientation: saved.orientation ?? 'normal',
+  backgroundEffect: saved.backgroundEffect ?? 'none',
+  backgroundIntensity: saved.backgroundIntensity ?? 1.0,
 
   setAudioGain: (band, gain) => {
     const audioGains = [...get().audioGains];
@@ -147,4 +158,6 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
 
   setMirrored: (v) => { set({ mirrored: v }); persistAll({ ...getPersistedSnapshot(get), mirrored: v }); },
   setOrientation: (v) => { set({ orientation: v }); persistAll({ ...getPersistedSnapshot(get), orientation: v }); },
+  setBackgroundEffect: (v) => { set({ backgroundEffect: v }); persistAll({ ...getPersistedSnapshot(get), backgroundEffect: v }); },
+  setBackgroundIntensity: (v) => { set({ backgroundIntensity: v }); persistAll({ ...getPersistedSnapshot(get), backgroundIntensity: v }); },
 }));
