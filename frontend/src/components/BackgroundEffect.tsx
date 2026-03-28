@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
 import { useVisualizerStore, type BackgroundEffect as BgEffect, type VisualizerOrientation } from '../stores/visualizerStore';
 import { BeatDetector } from '../lib/beatDetector';
+import { barHeights, barColors } from '../hooks/useVisualizer';
 
 interface BackgroundEffectProps {
   analyserRef: RefObject<AnalyserNode | null>;
@@ -117,59 +118,56 @@ interface Particle {
 function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _freq: ReturnType<typeof getFrequencyData>, particles: Particle[], colors: ReturnType<typeof getThemeColors>, gain: number, _beat: BeatDetector, analyserRef: AnalyserNode | null, mirrored: boolean, orientation: VisualizerOrientation) {
   ctx.clearRect(0, 0, w, h);
 
-  // Get raw frequency data for per-bin particle spawning
-  if (analyserRef) {
-    const rawData = new Uint8Array(analyserRef.frequencyBinCount);
-    analyserRef.getByteFrequencyData(rawData);
-    const bins = rawData.length;
-    const usableBins = Math.floor(bins * 0.6);
-    const centerX = w / 2;
+  // Spawn particles from visualizer bar tops using shared barHeights
+  const barCount = 128;
+  const isXl = w >= 1280;
+  const vizHeight = isXl ? 280 : 220;
+  const vizBottom = isXl ? -4 : -22;
+  const vizBaseline = h + vizBottom - vizHeight + 180;
+  const vizMaxBarHeight = 180 - 24;
+  const contentLeft = w > 1024 ? 256 : 0;
+  const contentW = w - contentLeft;
+  const contentCenter = contentLeft + contentW / 2;
 
-    for (let i = 0; i < usableBins; i++) {
-      const energy = rawData[i] / 255;
-      if (energy < 0.3) continue;
+  for (let i = 0; i < barCount; i++) {
+    const value = barHeights[i]; // 0-1, matches the visualizer's smoothed value
+    if (value < 0.2) continue;
 
-      const spawnChance = (energy - 0.3) * 2.5 * gain;
-      if (Math.random() > spawnChance) continue;
+    // Only spawn probabilistically — higher bars have higher chance
+    if (Math.random() > value * 0.3 * gain) continue;
 
-      // t = 0 is low freq, t = 1 is high freq
-      const t = i / usableBins;
+    const t = i / barCount;
+    const barHeight = value * vizMaxBarHeight;
+    const spawnY = vizBaseline - barHeight;
 
-      // Color based on frequency band
-      let color: string;
-      if (t < 0.33) color = colors.primary;
-      else if (t < 0.66) color = colors.secondary;
-      else color = colors.tertiary;
+    // Position matching visualizer layout
+    const pos = orientation === 'flipped' ? barCount - 1 - i : i;
+    const posNorm = pos / barCount;
 
-      const speed = (1 + energy * 4) * gain;
-      const size = (0.8 + energy * 2) * Math.min(gain, 1.5);
+    const xPositions: number[] = [];
+    if (mirrored) {
+      const halfW = contentW / 2;
+      xPositions.push(contentCenter + posNorm * halfW);
+      xPositions.push(contentCenter - posNorm * halfW);
+    } else {
+      xPositions.push(contentLeft + posNorm * contentW);
+    }
 
-      // Calculate positions based on visualizer layout
-      // Account for sidebar (256px / 16rem on lg screens)
-      const contentLeft = w > 1024 ? 256 : 0;
-      const contentW = w - contentLeft;
-      const contentCenter = contentLeft + contentW / 2;
+    const color = barColors[i] || colors.primary;
 
-      const positions: number[] = [];
-      if (mirrored) {
-        const pos = orientation === 'flipped' ? (1 - t) : t;
-        const halfW = contentW / 2;
-        positions.push(contentCenter - pos * halfW);
-        positions.push(contentCenter + pos * halfW);
-      } else {
-        const x = orientation === 'flipped' ? contentLeft + (1 - t) * contentW : contentLeft + t * contentW;
-        positions.push(x);
-      }
+    const speed = (0.5 + value * 3) * gain;
+    const size = (0.8 + value * 1.5) * Math.min(gain, 1.5);
 
-      for (const px of positions) {
+    for (const px of xPositions) {
+      {
         particles.push({
-          x: px + (Math.random() - 0.5) * 20,
-          y: h + 5,
-          vx: (Math.random() - 0.5) * 1.5,
+          x: px + (Math.random() - 0.5) * 15,
+          y: spawnY + (Math.random() - 0.5) * 8,
+          vx: (Math.random() - 0.5) * 1.2,
           vy: -speed,
           size,
           color,
-          life: 0.6 + energy * 0.4,
+          life: 0.5 + value * 0.5,
         });
       }
     }
@@ -194,7 +192,7 @@ function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _fre
   ctx.globalAlpha = 1;
 
   // Cap particle count — high enough that particles can live their full life
-  const maxParticles = Math.floor(2000 * Math.max(gain, 1));
+  const maxParticles = Math.floor(4000 * Math.max(gain, 1));
   if (particles.length > maxParticles) {
     particles.splice(0, particles.length - maxParticles);
   }

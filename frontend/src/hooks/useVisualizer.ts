@@ -4,6 +4,10 @@ import { getAllThemes } from '../stores/customThemeStore';
 import { hexToHSL } from '../lib/colorUtils';
 import { useVisualizerStore, BAND_COUNT } from '../stores/visualizerStore';
 
+// Shared bar data for other systems (e.g., particle effects) to read each frame.
+export const barHeights = new Float32Array(128); // 0..1 normalized height
+export const barColors: string[] = new Array(128).fill(''); // HSL color per bar
+
 export function useVisualizer(
   analyserRef: RefObject<AnalyserNode | null>,
 ) {
@@ -48,6 +52,7 @@ export function useVisualizer(
       const satTop = Math.min(sat * 1.1, 100);
       const satMid = Math.min(sat * 1.05, 100);
       colorsTop.push(`hsl(${hue}, ${satTop}%, 75%)`);
+      barColors[i] = `hsl(${hue}, ${satTop}%, 75%)`; // export for particles
       colorsMid.push(`hsl(${hue}, ${satMid}%, 55%)`);
       colorsDim.push(`hsla(${hue}, ${satMid}%, 55%, 0.4)`);
     }
@@ -140,6 +145,7 @@ export function useVisualizer(
         smoothed[i] = smoothed[i] * smoothing + normalized * (1 - smoothing);
 
         const value = smoothed[i];
+        barHeights[i] = value; // export for particle system
         const barHeight = Math.max(value * maxBarHeight, 2);
 
         if (value > peaks[i]) {
