@@ -85,6 +85,8 @@ export function useVisualizer(
     const draw = () => {
       animFrameRef.current = requestAnimationFrame(draw);
 
+      if (document.hidden) return;
+
       const analyser = analyserRef.current;
       if (!analyser) return;
 

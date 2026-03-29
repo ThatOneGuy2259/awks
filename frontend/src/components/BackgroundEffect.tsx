@@ -7,14 +7,21 @@ interface BackgroundEffectProps {
   analyserRef: RefObject<AnalyserNode | null>;
 }
 
+let cachedColors: { primary: string; secondary: string; tertiary: string; background: string } | null = null;
+let colorsCacheTime = 0;
+
 function getThemeColors(): { primary: string; secondary: string; tertiary: string; background: string } {
+  const now = Date.now();
+  if (cachedColors && now - colorsCacheTime < 1000) return cachedColors;
   const style = getComputedStyle(document.documentElement);
-  return {
+  cachedColors = {
     primary: style.getPropertyValue('--color-primary').trim() || '#cf96ff',
     secondary: style.getPropertyValue('--color-secondary').trim() || '#00f4fe',
     tertiary: style.getPropertyValue('--color-tertiary').trim() || '#ff6b9b',
     background: style.getPropertyValue('--color-background').trim() || '#0e0e13',
   };
+  colorsCacheTime = now;
+  return cachedColors;
 }
 
 function getFrequencyData(analyser: AnalyserNode | null): { bass: number; mid: number; high: number; overall: number } {
@@ -172,28 +179,28 @@ function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _fre
     }
   }
 
-  // Update and draw
-  for (let i = particles.length - 1; i >= 0; i--) {
+  // Update and draw — swap-and-pop removal to avoid O(n²) splice
+  let writeIdx = 0;
+  for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     p.x += p.vx;
     p.y += p.vy;
     p.life -= 0.005;
-    if (p.life <= 0 || p.y < -10) {
-      particles.splice(i, 1);
-      continue;
-    }
+    if (p.life <= 0 || p.y < -10) continue;
     ctx.globalAlpha = p.life * 0.85;
     ctx.fillStyle = p.color;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
     ctx.fill();
+    particles[writeIdx++] = p;
   }
+  particles.length = writeIdx;
   ctx.globalAlpha = 1;
 
-  // Cap particle count — high enough that particles can live their full life
+  // Cap particle count
   const maxParticles = Math.floor(4000 * Math.max(gain, 1));
   if (particles.length > maxParticles) {
-    particles.splice(0, particles.length - maxParticles);
+    particles.length = maxParticles;
   }
 }
 
@@ -234,8 +241,18 @@ export function BackgroundEffectCanvas({ analyserRef }: BackgroundEffectProps) {
     startTimeRef.current = Date.now();
     beatRef.current = new BeatDetector(analyserRef.current?.frequencyBinCount ?? 128);
 
-    const draw = () => {
+    let lastFrameTime = 0;
+    const frameBudget = 1000 / 30; // 30fps target
+
+    const draw = (now: number) => {
       animRef.current = requestAnimationFrame(draw);
+
+      if (document.hidden) return;
+
+      // Throttle to ~30fps — background effects don't need 60fps
+      if (now - lastFrameTime < frameBudget) return;
+      lastFrameTime = now;
+
       const w = canvas.width;
       const h = canvas.height;
       const freq = getFrequencyData(analyserRef.current);
