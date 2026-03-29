@@ -3,16 +3,21 @@ set -euo pipefail
 
 # AWKS Production Deploy Script
 # Builds frontend + backend from source, starts containers, runs the server.
-# Usage: ./deploy.sh [--rebuild]
-#   --rebuild  Force rebuild even if binaries exist
+# Usage: ./deploy.sh [--rebuild] [--build-only]
+#   --rebuild     Force rebuild even if binaries exist
+#   --build-only  Build without starting the server (for systemd deploys)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 REBUILD=false
-if [[ "${1:-}" == "--rebuild" ]]; then
-  REBUILD=true
-fi
+BUILD_ONLY=false
+for arg in "$@"; do
+  case "$arg" in
+    --rebuild) REBUILD=true ;;
+    --build-only) BUILD_ONLY=true ;;
+  esac
+done
 
 # Colors
 RED='\033[0;31m'
@@ -102,6 +107,11 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 
 log "Loaded environment from $ENV_FILE"
+
+if [ "$BUILD_ONLY" = true ]; then
+  log "Build complete (--build-only). Skipping server start."
+  exit 0
+fi
 
 # ── Run server ────────────────────────────────────────────────────────
 
