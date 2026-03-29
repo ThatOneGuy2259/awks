@@ -10,6 +10,7 @@ export function QuickSearch() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const [queuingIndex, setQueuingIndex] = useState(-1);
+  const [queuedIds, setQueuedIds] = useState<Set<string>>(new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,6 +37,7 @@ export function QuickSearch() {
     setLoading(true);
     setShowDropdown(true);
     setHighlightIndex(-1);
+    setQueuedIds(new Set());
     try {
       const data = await api.search(query);
       setResults(data);
@@ -47,12 +49,12 @@ export function QuickSearch() {
   };
 
   const handleQueue = async (result: SearchResult, index: number) => {
+    if (queuedIds.has(result.video_id)) return;
     setQueuingIndex(index);
     try {
       await api.addToQueue(`https://www.youtube.com/watch?v=${result.video_id}`);
+      setQueuedIds((prev) => new Set(prev).add(result.video_id));
       toast('Queued!', 'success');
-      closeDropdown();
-      setQuery('');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Failed to queue', 'error');
     } finally {
@@ -107,11 +109,6 @@ export function QuickSearch() {
         <span className="material-symbols-outlined text-on-surface-variant text-lg absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none leading-none">
           search
         </span>
-        {loading && (
-          <span className="material-symbols-outlined text-primary text-base absolute right-3 top-1/2 -translate-y-1/2 animate-spin pointer-events-none leading-none">
-            progress_activity
-          </span>
-        )}
       </div>
 
       {/* Results dropdown */}
@@ -129,29 +126,39 @@ export function QuickSearch() {
             </div>
           )}
 
-          {results.map((result, i) => (
-            <button
-              key={result.video_id}
-              onMouseDown={(e) => { e.preventDefault(); handleQueue(result, i); }}
-              onMouseEnter={() => setHighlightIndex(i)}
-              disabled={queuingIndex === i}
-              className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-outline-variant/10 last:border-b-0 ${
-                i === highlightIndex
-                  ? 'bg-primary/10'
-                  : 'hover:bg-white/5'
-              } ${queuingIndex === i ? 'opacity-50' : ''}`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-bold text-on-surface truncate">{result.title}</p>
-                <p className="text-xs text-on-surface-variant truncate">{result.artist}</p>
-              </div>
-              {result.duration_sec > 0 && (
-                <span className="text-xs text-on-surface-variant flex-shrink-0 tabular-nums">
-                  {formatTime(result.duration_sec)}
-                </span>
-              )}
-            </button>
-          ))}
+          {results.map((result, i) => {
+            const isQueued = queuedIds.has(result.video_id);
+            const isQueuing = queuingIndex === i;
+            return (
+              <button
+                key={result.video_id}
+                onMouseDown={(e) => { e.preventDefault(); handleQueue(result, i); }}
+                onMouseEnter={() => setHighlightIndex(i)}
+                disabled={isQueuing || isQueued}
+                className={`w-full text-left px-4 py-3 flex items-center gap-3 transition-colors border-b border-outline-variant/10 last:border-b-0 ${
+                  isQueued
+                    ? 'bg-secondary/5'
+                    : i === highlightIndex
+                      ? 'bg-primary/10'
+                      : 'hover:bg-white/5'
+                } ${isQueuing ? 'opacity-50' : ''}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-bold truncate ${isQueued ? 'text-secondary' : 'text-on-surface'}`}>{result.title}</p>
+                  <p className="text-xs text-on-surface-variant truncate">{result.artist}</p>
+                </div>
+                {isQueuing ? (
+                  <span className="material-symbols-outlined text-primary text-base animate-spin flex-shrink-0">progress_activity</span>
+                ) : isQueued ? (
+                  <span className="material-symbols-outlined text-secondary text-base flex-shrink-0">check_circle</span>
+                ) : result.duration_sec > 0 ? (
+                  <span className="text-xs text-on-surface-variant flex-shrink-0 tabular-nums">
+                    {formatTime(result.duration_sec)}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
