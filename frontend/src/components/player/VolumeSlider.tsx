@@ -1,16 +1,24 @@
+import { useRef } from 'react';
+
 interface VolumeSliderProps {
   volume: number;
   onChange: (v: number) => void;
 }
 
 export function VolumeSlider({ volume, onChange }: VolumeSliderProps) {
+  const preMuteRef = useRef(volume || 70);
   const icon = volume === 0 ? 'volume_off' : volume < 50 ? 'volume_down' : 'volume_up';
+
+  // Track the last non-zero volume so unmute restores it
+  if (volume > 0) {
+    preMuteRef.current = volume;
+  }
 
   return (
     <div className="flex items-center gap-2 w-28">
       <button
         className="text-on-surface-variant hover:text-on-surface transition-colors"
-        onClick={() => onChange(volume === 0 ? 70 : 0)}
+        onClick={() => onChange(volume === 0 ? preMuteRef.current : 0)}
       >
         <span className="material-symbols-outlined text-lg">{icon}</span>
       </button>
