@@ -13,6 +13,7 @@ import (
 )
 
 var ytRegex = regexp.MustCompile(`(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})`)
+var videoIDRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{11}$`)
 
 type VideoMeta struct {
 	VideoID      string `json:"video_id"`
@@ -27,7 +28,7 @@ func ExtractVideoID(rawURL string) (string, error) {
 	if len(matches) >= 2 {
 		return matches[1], nil
 	}
-	if len(rawURL) == 11 {
+	if videoIDRegex.MatchString(rawURL) {
 		return rawURL, nil
 	}
 	return "", fmt.Errorf("invalid YouTube URL: %s", rawURL)
@@ -159,13 +160,13 @@ type SearchResult struct {
 	ThumbnailURL string `json:"thumbnail_url"`
 }
 
-// SearchYouTubeYtdlp uses yt-dlp to search YouTube Music with full metadata including duration.
+// SearchYouTubeYtdlp uses yt-dlp to search YouTube with full metadata including duration.
 func SearchYouTubeYtdlp(query, ytdlpPath string) ([]SearchResult, error) {
 	cmd := exec.Command(ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",
-		"--default-search", "ytmsearch12",
+		"--default-search", "ytsearch12",
 		query,
 	)
 

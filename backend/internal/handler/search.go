@@ -33,7 +33,7 @@ func NewSearchHandler(apiKey, ytdlpPath string, queries store.Querier) *SearchHa
 func filterByDuration(results []service.SearchResult, maxDuration int) []service.SearchResult {
 	filtered := make([]service.SearchResult, 0, len(results))
 	for _, r := range results {
-		if r.DurationSec == 0 || r.DurationSec <= maxDuration {
+		if r.DurationSec > 0 && r.DurationSec <= maxDuration {
 			filtered = append(filtered, r)
 		}
 	}
