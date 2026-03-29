@@ -58,8 +58,13 @@ function connectWs(token: string) {
       socket.send(msg);
     }
     pendingMessages = [];
-    api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
-    api.getPlayback().then((state) => {
+    Promise.all([
+      api.getQueue().catch(() => null),
+      api.getPlayback().catch(() => null),
+      api.getSettings().catch(() => null),
+      api.getListeners().catch(() => null),
+    ]).then(([tracks, state, settings, listeners]) => {
+      if (tracks) useQueueStore.getState().setTracks(tracks);
       if (state && state.video_id) {
         usePlaybackStore.getState().setTrack({
           queueId: state.queue_id,
@@ -74,24 +79,14 @@ function connectWs(token: string) {
           durationSec: state.duration_sec,
         });
       }
-    }).catch(() => {});
-    api.getSettings().then((settings) => {
-      if (settings.skip_votes_required) {
-        useSkipVoteStore.getState().setFixedRequired(Number(settings.skip_votes_required));
+      if (settings) {
+        if (settings.skip_votes_required) useSkipVoteStore.getState().setFixedRequired(Number(settings.skip_votes_required));
+        if (settings.skip_mode) useSkipVoteStore.getState().setSkipMode(settings.skip_mode);
+        if (settings.skip_percent) useSkipVoteStore.getState().setSkipPercent(Number(settings.skip_percent));
+        if (settings.max_tracks_per_user) useSettingsStore.getState().setMaxTracksPerUser(Number(settings.max_tracks_per_user));
       }
-      if (settings.skip_mode) {
-        useSkipVoteStore.getState().setSkipMode(settings.skip_mode);
-      }
-      if (settings.skip_percent) {
-        useSkipVoteStore.getState().setSkipPercent(Number(settings.skip_percent));
-      }
-      if (settings.max_tracks_per_user) {
-        useSettingsStore.getState().setMaxTracksPerUser(Number(settings.max_tracks_per_user));
-      }
-    }).catch(() => {});
-    api.getListeners().then((data) => {
-      useListenerStore.getState().setListeners(data.count, data.listeners);
-    }).catch(() => {});
+      if (listeners) useListenerStore.getState().setListeners(listeners.count, listeners.listeners);
+    });
   };
 
   socket.onmessage = (event) => {

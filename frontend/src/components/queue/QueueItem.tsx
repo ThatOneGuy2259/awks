@@ -29,6 +29,7 @@ export function QueueItem({ track, index }: QueueItemProps) {
           className="w-full h-full object-cover"
           src={track.thumbnail_url || `https://img.youtube.com/vi/${track.video_id}/default.jpg`}
           alt={track.title}
+          loading="lazy"
         />
       </div>
       <div className="flex-1 min-w-0">
@@ -50,7 +51,7 @@ export function QueueItem({ track, index }: QueueItemProps) {
         ) : (
           <>
             {track.requester_avatar && (
-              <img className="w-6 h-6 rounded-full" src={track.requester_avatar} alt={track.requester_name} />
+              <img className="w-6 h-6 rounded-full" src={track.requester_avatar} alt={track.requester_name} loading="lazy" />
             )}
             <span>
               Requested by <span className="text-on-surface">{track.requester_name}</span>

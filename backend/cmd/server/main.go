@@ -295,6 +295,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
+	r.Use(chimw.Compress(5))
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:  strings.Split(cfg.CORSOrigin, ","),
 		AllowedMethods:  []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},

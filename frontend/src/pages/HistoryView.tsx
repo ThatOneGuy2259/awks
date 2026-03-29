@@ -121,6 +121,7 @@ export function HistoryView() {
                   src={`https://img.youtube.com/vi/${entry.video_id}/default.jpg`}
                   alt={entry.title}
                   className="w-full h-full object-cover"
+                  loading="lazy"
                 />
                 {entry.skipped && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">

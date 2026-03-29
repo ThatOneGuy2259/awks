@@ -36,6 +36,7 @@ export function AdminQueueItem({ track, isPlaying }: AdminQueueItemProps) {
           className={`w-full h-full object-cover rounded-lg ${!isPlaying ? 'grayscale group-hover:grayscale-0 transition-all' : ''}`}
           src={track.thumbnail_url || `https://img.youtube.com/vi/${track.video_id}/default.jpg`}
           alt={track.title}
+          loading="lazy"
         />
         {isPlaying && (
           <div className="absolute inset-0 bg-primary/20 flex items-center justify-center rounded-lg">

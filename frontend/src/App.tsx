@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import { Sidebar } from './components/layout/Sidebar';
@@ -6,10 +6,11 @@ import { TopBar } from './components/layout/TopBar';
 import { BottomNav } from './components/layout/BottomNav';
 import { PlayerBar } from './components/layout/PlayerBar';
 import { MusicQueueView } from './pages/MusicQueueView';
-import { SearchRequestView } from './pages/SearchRequestView';
-import { AdminDashboardView } from './pages/AdminDashboardView';
-import { HistoryView } from './pages/HistoryView';
 import { useWebSocket } from './hooks/useWebSocket';
+
+const SearchRequestView = lazy(() => import('./pages/SearchRequestView').then(m => ({ default: m.SearchRequestView })));
+const AdminDashboardView = lazy(() => import('./pages/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
+const HistoryView = lazy(() => import('./pages/HistoryView').then(m => ({ default: m.HistoryView })));
 import { useWebRTC } from './hooks/useWebRTC';
 import { setGetTokenFn, api } from './lib/api';
 import { useUserStore } from './stores/userStore';
@@ -48,7 +49,7 @@ function AuthenticatedApp() {
   if (!ready) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <span className="material-symbols-outlined text-5xl text-primary animate-spin">progress_activity</span>
+        <div className="w-10 h-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
@@ -68,12 +69,14 @@ function AppContent() {
       <ConnectionBanner />
 
       <main className="lg:pl-64 pt-20 pb-32 min-h-screen relative z-[2]">
-        <Routes>
-          <Route path="/" element={<MusicQueueView />} />
-          <Route path="/search" element={<SearchRequestView />} />
-          <Route path="/history" element={<HistoryView />} />
-          <Route path="/admin" element={<AdminRoute />} />
-        </Routes>
+        <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
+          <Routes>
+            <Route path="/" element={<MusicQueueView />} />
+            <Route path="/search" element={<SearchRequestView />} />
+            <Route path="/history" element={<HistoryView />} />
+            <Route path="/admin" element={<AdminRoute />} />
+          </Routes>
+        </Suspense>
       </main>
 
       <PlayerBar volume={volume} onVolumeChange={setVolume} analyserRef={analyserRef} />

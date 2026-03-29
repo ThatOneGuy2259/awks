@@ -25,7 +25,7 @@ export function OnlineListeners() {
               } transition-colors`}
             >
               {listener.avatar_url ? (
-                <img className="w-full h-full object-cover rounded-full" src={listener.avatar_url} alt={listener.username} />
+                <img className="w-full h-full object-cover rounded-full" src={listener.avatar_url} alt={listener.username} loading="lazy" />
               ) : (
                 <div className="w-full h-full rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-bold text-primary">
                   {listener.username.charAt(0).toUpperCase()}

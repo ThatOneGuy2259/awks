@@ -104,6 +104,7 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
           className="w-full h-full object-cover rounded grayscale group-hover:grayscale-0 transition-all duration-500"
           src={track.thumbnail_url}
           alt={track.title}
+          loading="lazy"
         />
         {track.duration_sec > 0 && (
           <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[8px] font-bold px-1 py-px rounded">

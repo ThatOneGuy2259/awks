@@ -34,7 +34,7 @@ export function LiveChat({ onSend }: LiveChatProps) {
           <div key={i} className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-primary-container/20 flex-shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold text-primary">
               {msg.user.avatar_url ? (
-                <img className="w-full h-full object-cover" src={msg.user.avatar_url} alt={msg.user.username} />
+                <img className="w-full h-full object-cover" src={msg.user.avatar_url} alt={msg.user.username} loading="lazy" />
               ) : (
                 msg.user.username.charAt(0).toUpperCase()
               )}

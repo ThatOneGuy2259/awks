@@ -193,7 +193,7 @@ export function AdminDashboardView() {
               {listeners.map((listener) => (
                 <div key={listener.id} className="flex items-center gap-3">
                   {listener.avatar_url ? (
-                    <img className="w-10 h-10 rounded-full flex-shrink-0" src={listener.avatar_url} alt={listener.username} />
+                    <img className="w-10 h-10 rounded-full flex-shrink-0" src={listener.avatar_url} alt={listener.username} loading="lazy" />
                   ) : (
                     <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
                       {listener.username.charAt(0).toUpperCase()}
