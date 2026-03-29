@@ -349,10 +349,15 @@ func main() {
 			}
 			fullPath := filepath.Join(cfg.StaticDir, path)
 			if _, err := os.Stat(fullPath); err == nil {
+				// Fingerprinted assets (assets/) are immutable — cache forever
+				if strings.HasPrefix(path, "assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				}
 				http.FileServer(staticDir).ServeHTTP(w, r)
 				return
 			}
-			// SPA fallback: serve index.html for client-side routes
+			// SPA fallback: serve index.html for client-side routes (short cache)
+			w.Header().Set("Cache-Control", "no-cache")
 			http.ServeFile(w, r, filepath.Join(cfg.StaticDir, "index.html"))
 		})
 		log.Printf("Serving frontend from %s", cfg.StaticDir)

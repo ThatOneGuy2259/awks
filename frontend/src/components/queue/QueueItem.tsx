@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { QueueTrack } from '../../lib/api';
 import { api } from '../../lib/api';
 import { useUserStore } from '../../stores/userStore';
@@ -8,7 +9,7 @@ interface QueueItemProps {
   index: number;
 }
 
-export function QueueItem({ track, index }: QueueItemProps) {
+export const QueueItem = memo(function QueueItem({ track, index }: QueueItemProps) {
   const isAdmin = useUserStore((s) => s.role === 'admin');
 
   const handleRemove = async () => {
@@ -99,4 +100,4 @@ export function QueueItem({ track, index }: QueueItemProps) {
       </div>
     </div>
   );
-}
+});

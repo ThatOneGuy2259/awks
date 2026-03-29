@@ -29,7 +29,7 @@ type Querier interface {
 	GetHistory(ctx context.Context, arg GetHistoryParams) ([]GetHistoryRow, error)
 	GetNextPending(ctx context.Context) (GetNextPendingRow, error)
 	GetNextPendingExtraction(ctx context.Context) (GetNextPendingExtractionRow, error)
-	GetNextReadyPending(ctx context.Context) (Queue, error)
+	GetNextReadyPending(ctx context.Context) (GetNextReadyPendingRow, error)
 	GetPendingExtractions(ctx context.Context) ([]GetPendingExtractionsRow, error)
 	GetQueue(ctx context.Context) ([]GetQueueRow, error)
 	GetQueueItem(ctx context.Context, id pgtype.UUID) (Queue, error)

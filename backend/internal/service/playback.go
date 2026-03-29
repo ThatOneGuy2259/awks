@@ -22,16 +22,27 @@ type PlaybackService struct {
 	broadcaster  *audio.Broadcaster
 	preloadNext  func(ctx context.Context)
 	autoDJQueue  func(ctx context.Context) bool // returns true if an auto-DJ track was queued
+	cleanupCh    chan string // audio file paths to delete after a delay
 	mu           sync.Mutex
 }
 
 func NewPlaybackService(q store.Querier, r *redisclient.Client, wsbroadcast func(model.WSMessage), broadcaster *audio.Broadcaster) *PlaybackService {
-	return &PlaybackService{
+	s := &PlaybackService{
 		queries:     q,
 		redis:       r,
 		wsbroadcast: wsbroadcast,
 		broadcaster: broadcaster,
+		cleanupCh:   make(chan string, 64),
 	}
+	// Single goroutine handles all deferred audio file cleanup
+	go func() {
+		for path := range s.cleanupCh {
+			time.Sleep(30 * time.Second)
+			os.Remove(path)
+			log.Printf("[playback] cleaned up audio file: %s", path)
+		}
+	}()
+	return s
 }
 
 // SetPreloadNext sets the callback to preload the next track after advancing.
@@ -74,11 +85,10 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 
 		// Schedule audio file cleanup (skip auto-DJ tracks — they're permanent)
 		if current.AudioPath.Valid && !strings.Contains(current.AudioPath.String, "auto-dj-cache") {
-			go func(path string) {
-				time.Sleep(30 * time.Second)
-				os.Remove(path)
-				log.Printf("[playback] cleaned up audio file: %s", path)
-			}(current.AudioPath.String)
+			select {
+			case s.cleanupCh <- current.AudioPath.String:
+			default:
+			}
 		}
 	}
 
@@ -109,15 +119,9 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 
 	now := time.Now().UTC()
 
-	// Look up requester name and avatar
-	var requesterName, requesterAvatar string
+	requesterName := next.RequesterName
 	if next.RequestedBy == "auto-dj" {
 		requesterName = "Auto-DJ"
-	} else if user, err := s.queries.GetUser(ctx, next.RequestedBy); err == nil {
-		requesterName = user.Username
-		if user.AvatarUrl.Valid {
-			requesterAvatar = user.AvatarUrl.String
-		}
 	}
 
 	state := &model.PlaybackState{
@@ -130,7 +134,7 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 		DurationSec:    int(next.DurationSec),
 		RequestedBy:    next.RequestedBy,
 		RequesterName:  requesterName,
-		RequesterAvatar: requesterAvatar,
+		RequesterAvatar: pgTextToString(next.RequesterAvatar),
 	}
 	s.redis.SetPlaybackState(ctx, state)
 

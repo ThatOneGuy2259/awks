@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { SearchResult } from '../../lib/api';
 import { api } from '../../lib/api';
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -11,7 +12,7 @@ interface TrackCardProps {
   disabled?: boolean;
 }
 
-export function TrackCard({ track, featured, disabled }: TrackCardProps) {
+export const TrackCard = memo(function TrackCard({ track, featured, disabled }: TrackCardProps) {
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
@@ -125,4 +126,4 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
       </button>
     </div>
   );
-}
+});

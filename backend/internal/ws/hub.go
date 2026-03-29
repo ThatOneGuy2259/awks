@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/mccann/awks3/backend/internal/model"
@@ -54,22 +55,33 @@ func (h *Hub) removeClient(client *Client) {
 }
 
 func (h *Hub) Run() {
+	var debounceTimer *time.Timer
+	scheduleOnChange := func() {
+		if debounceTimer != nil {
+			debounceTimer.Stop()
+		}
+		debounceTimer = time.AfterFunc(time.Second, func() {
+			h.mu.RLock()
+			fn := h.onChange
+			h.mu.RUnlock()
+			if fn != nil {
+				fn()
+			}
+		})
+	}
+
 	for {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			if h.onChange != nil {
-				h.onChange()
-			}
+			scheduleOnChange()
 		case client := <-h.unregister:
 			h.mu.Lock()
 			h.removeClient(client)
 			h.mu.Unlock()
-			if h.onChange != nil {
-				h.onChange()
-			}
+			scheduleOnChange()
 		case message := <-h.broadcast:
 			h.mu.Lock()
 			for client := range h.clients {

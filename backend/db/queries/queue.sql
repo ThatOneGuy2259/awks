@@ -62,11 +62,14 @@ WHERE status IN ('pending', 'playing') AND audio_status IN ('pending', 'extracti
 ORDER BY position ASC;
 
 -- name: GetNextReadyPending :one
-SELECT id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url,
-       requested_by, position, status, created_at, audio_status, audio_path
-FROM queue
-WHERE status = 'pending' AND audio_status = 'ready'
-ORDER BY position ASC
+SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec, q.thumbnail_url,
+       q.requested_by, q.position, q.status, q.created_at, q.audio_status, q.audio_path,
+       COALESCE(u.username, q.requested_by) AS requester_name,
+       u.avatar_url AS requester_avatar
+FROM queue q
+LEFT JOIN users u ON u.id = q.requested_by
+WHERE q.status = 'pending' AND q.audio_status = 'ready'
+ORDER BY q.position ASC
 LIMIT 1;
 
 -- name: GetNextPendingExtraction :one

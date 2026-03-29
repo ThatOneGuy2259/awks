@@ -14,16 +14,6 @@ type AdminSetting struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-type AutoDjTrack struct {
-	ID          pgtype.UUID        `json:"id"`
-	VideoID     string             `json:"video_id"`
-	Title       string             `json:"title"`
-	Artist      pgtype.Text        `json:"artist"`
-	DurationSec int32              `json:"duration_sec"`
-	FilePath    string             `json:"file_path"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-}
-
 type PlayHistory struct {
 	ID          pgtype.UUID        `json:"id"`
 	VideoID     string             `json:"video_id"`
