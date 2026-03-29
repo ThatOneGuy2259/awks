@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { UserButton } from '@clerk/clerk-react';
 import { ThemeModal } from '../settings/ThemeModal';
 import { AwksLogo } from '../AwksLogo';
+import { QuickSearch } from './QuickSearch';
 
 export function TopBar() {
   const [showSettings, setShowSettings] = useState(false);
@@ -15,6 +16,7 @@ export function TopBar() {
         <div className="hidden lg:block" />
 
         <div className="flex items-center gap-4">
+          <QuickSearch />
           <button
             onClick={() => setShowSettings(true)}
             className="text-on-surface-variant hover:text-primary transition-colors"
