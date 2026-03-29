@@ -159,13 +159,13 @@ type SearchResult struct {
 	ThumbnailURL string `json:"thumbnail_url"`
 }
 
-// SearchYouTubeYtdlp uses yt-dlp to search YouTube with full metadata including duration.
+// SearchYouTubeYtdlp uses yt-dlp to search YouTube Music with full metadata including duration.
 func SearchYouTubeYtdlp(query, ytdlpPath string) ([]SearchResult, error) {
 	cmd := exec.Command(ytdlpPath,
 		"--dump-json",
 		"--flat-playlist",
 		"--no-warnings",
-		"--default-search", "ytsearch12",
+		"--default-search", "ytmsearch12",
 		query,
 	)
 
