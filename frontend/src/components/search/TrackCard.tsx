@@ -1,6 +1,7 @@
 import type { SearchResult } from '../../lib/api';
 import { api } from '../../lib/api';
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { TrackTooltip } from './TrackTooltip';
 import { formatTime } from '../../lib/formatTime';
 import { toast } from '../../stores/toastStore';
 
@@ -13,6 +14,8 @@ interface TrackCardProps {
 export function TrackCard({ track, featured, disabled }: TrackCardProps) {
   const [requesting, setRequesting] = useState(false);
   const [requested, setRequested] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const handleRequest = async () => {
     setRequesting(true);
@@ -25,6 +28,23 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
       setRequesting(false);
     }
   };
+
+  const handleMouseEnter = useCallback(() => {
+    hoverTimerRef.current = setTimeout(() => setShowTooltip(true), 200);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+    setShowTooltip(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+      }
+    };
+  }, []);
 
   if (featured) {
     return (
@@ -71,7 +91,14 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
   }
 
   return (
-    <div className="bg-surface-container p-6 rounded-xl border border-outline-variant/10 group">
+    <div className="bg-surface-container p-6 rounded-xl border border-outline-variant/10 group relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+      {showTooltip && (
+        <TrackTooltip
+          title={track.title}
+          artist={track.artist}
+          durationSec={track.duration_sec}
+        />
+      )}
       <div className="relative mb-4">
         <img
           className="w-full aspect-square object-cover rounded-lg grayscale group-hover:grayscale-0 transition-all duration-500"
