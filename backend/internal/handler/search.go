@@ -51,7 +51,7 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 
 	videoID, err := service.ExtractVideoID(query)
 	if err == nil {
-		meta, err := service.ResolveVideoMeta(videoID, h.apiKey)
+		meta, err := service.ResolveVideoMeta(videoID, h.apiKey, h.ytdlpPath)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

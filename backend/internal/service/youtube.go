@@ -34,14 +34,14 @@ func ExtractVideoID(rawURL string) (string, error) {
 	return "", fmt.Errorf("invalid YouTube URL: %s", rawURL)
 }
 
-func ResolveVideoMeta(videoID, apiKey string) (*VideoMeta, error) {
+func ResolveVideoMeta(videoID, apiKey, ytdlpPath string) (*VideoMeta, error) {
 	if apiKey != "" {
 		return resolveViaAPI(videoID, apiKey)
 	}
-	return resolveViaOEmbed(videoID)
+	return resolveViaOEmbed(videoID, ytdlpPath)
 }
 
-func resolveViaOEmbed(videoID string) (*VideoMeta, error) {
+func resolveViaOEmbed(videoID, ytdlpPath string) (*VideoMeta, error) {
 	oembedURL := fmt.Sprintf("https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=%s&format=json", videoID)
 	resp, err := http.Get(oembedURL)
 	if err != nil {
@@ -61,13 +61,32 @@ func resolveViaOEmbed(videoID string) (*VideoMeta, error) {
 		return nil, err
 	}
 
+	// Get real duration via yt-dlp instead of hardcoding a guess
+	duration := 300
+	if ytdlpPath != "" {
+		cmd := exec.Command(ytdlpPath, "--print", "duration", "--no-warnings",
+			fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID))
+		if out, err := cmd.Output(); err == nil {
+			if secs, err := parseDurationOutput(strings.TrimSpace(string(out))); err == nil && secs > 0 {
+				duration = secs
+			}
+		}
+	}
+
 	return &VideoMeta{
 		VideoID:      videoID,
 		Title:        data.Title,
 		Artist:       data.AuthorName,
-		DurationSec:  300, // default estimate; client will get real duration from YT player
+		DurationSec:  duration,
 		ThumbnailURL: fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", videoID),
 	}, nil
+}
+
+func parseDurationOutput(s string) (int, error) {
+	// yt-dlp returns duration as a float (e.g. "234.5")
+	var f float64
+	_, err := fmt.Sscanf(s, "%f", &f)
+	return int(f), err
 }
 
 type ytAPIResponse struct {

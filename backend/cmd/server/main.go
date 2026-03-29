@@ -280,7 +280,7 @@ func main() {
 	}()
 
 	// Handlers
-	queueH := handler.NewQueueHandler(queries, playbackSvc, hub, cfg.YouTubeAPIKey, extractor)
+	queueH := handler.NewQueueHandler(queries, playbackSvc, hub, cfg.YouTubeAPIKey, cfg.YtdlpPath, extractor)
 	playbackH := handler.NewPlaybackHandler(playbackSvc)
 	adminH := handler.NewAdminHandler(queries, playbackSvc, hub)
 	wsH := handler.NewWSHandler(hub, peerManager)

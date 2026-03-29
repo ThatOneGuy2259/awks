@@ -22,11 +22,12 @@ type QueueHandler struct {
 	playback  *service.PlaybackService
 	hub       *ws.Hub
 	apiKey    string
+	ytdlpPath string
 	extractor *audio.Extractor
 }
 
-func NewQueueHandler(q store.Querier, p *service.PlaybackService, h *ws.Hub, apiKey string, ext *audio.Extractor) *QueueHandler {
-	return &QueueHandler{queries: q, playback: p, hub: h, apiKey: apiKey, extractor: ext}
+func NewQueueHandler(q store.Querier, p *service.PlaybackService, h *ws.Hub, apiKey, ytdlpPath string, ext *audio.Extractor) *QueueHandler {
+	return &QueueHandler{queries: q, playback: p, hub: h, apiKey: apiKey, ytdlpPath: ytdlpPath, extractor: ext}
 }
 
 func (h *QueueHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
@@ -111,7 +112,7 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	meta, err := service.ResolveVideoMeta(videoID, h.apiKey)
+	meta, err := service.ResolveVideoMeta(videoID, h.apiKey, h.ytdlpPath)
 	if err != nil {
 		http.Error(w, "could not resolve video: "+err.Error(), http.StatusBadRequest)
 		return

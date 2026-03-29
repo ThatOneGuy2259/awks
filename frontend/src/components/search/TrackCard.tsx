@@ -91,7 +91,7 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
   }
 
   return (
-    <div className="bg-surface-container p-6 rounded-xl border border-outline-variant/10 group relative" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
+    <div className="bg-surface-container p-3 rounded-lg border border-outline-variant/10 group relative flex gap-3 items-center" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
       {showTooltip && (
         <TrackTooltip
           title={track.title}
@@ -99,31 +99,29 @@ export function TrackCard({ track, featured, disabled }: TrackCardProps) {
           durationSec={track.duration_sec}
         />
       )}
-      <div className="relative mb-4">
+      <div className="relative w-12 h-12 flex-shrink-0">
         <img
-          className="w-full aspect-square object-cover rounded-lg grayscale group-hover:grayscale-0 transition-all duration-500"
+          className="w-full h-full object-cover rounded grayscale group-hover:grayscale-0 transition-all duration-500"
           src={track.thumbnail_url}
           alt={track.title}
         />
         {track.duration_sec > 0 && (
-          <span className="absolute bottom-1.5 right-1.5 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+          <span className="absolute bottom-0 right-0 bg-black/70 text-white text-[8px] font-bold px-1 py-px rounded">
             {formatTime(track.duration_sec)}
           </span>
         )}
       </div>
-      <div className="flex justify-between items-start">
-        <div className="min-w-0 flex-1">
-          <h4 className="font-bold text-on-surface truncate">{track.title}</h4>
-          <p className="text-sm text-on-surface-variant truncate">{track.artist}</p>
-        </div>
-        <button
-          onClick={handleRequest}
-          disabled={requesting || requested || disabled}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-highest text-secondary hover:bg-secondary hover:text-on-secondary-fixed transition-all disabled:opacity-50 flex-shrink-0 ml-2"
-        >
-          <span className="material-symbols-outlined">{requested ? 'check' : 'playlist_add'}</span>
-        </button>
+      <div className="min-w-0 flex-1">
+        <h4 className="text-sm font-bold text-on-surface truncate">{track.title}</h4>
+        <p className="text-xs text-on-surface-variant truncate">{track.artist}</p>
       </div>
+      <button
+        onClick={handleRequest}
+        disabled={requesting || requested || disabled}
+        className="w-8 h-8 flex items-center justify-center rounded-full bg-surface-container-highest text-secondary hover:bg-secondary hover:text-on-secondary-fixed transition-all disabled:opacity-50 flex-shrink-0"
+      >
+        <span className="material-symbols-outlined text-lg">{requested ? 'check' : 'playlist_add'}</span>
+      </button>
     </div>
   );
 }

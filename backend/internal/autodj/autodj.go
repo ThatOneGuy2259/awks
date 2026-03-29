@@ -16,11 +16,12 @@ import (
 	"github.com/mccann/awks3/backend/internal/store"
 )
 
-const (
-	playlistURL    = "https://www.youtube.com/watch?v=GgVcgbtHY9k&list=PLBTanuC8SLeZUH4mYXFvRbDfxTMKvNLHJ"
-	minTracksReady = 60
-	SystemUserID   = "auto-dj"
-)
+var playlistURLs = []string{
+	"https://music.youtube.com/watch?v=LJNiMJvnxT0&list=OLAK5uy_l9tVtOqp3cp8P_ajvkbPEpNdBbkSHzIP8",
+	"https://music.youtube.com/playlist?list=OLAK5uy_nqZhqerW6fOvpJVbVB9yWMbnpDcJ6wz80",
+}
+
+const SystemUserID = "auto-dj"
 
 var chicagoTZ *time.Location
 
@@ -223,8 +224,8 @@ func BackfillMetadata(ctx context.Context, ytdlpPath, cacheDir string) {
 	}
 }
 
-// SyncPlaylist downloads tracks from the configured playlist that aren't already cached.
-// Runs in the background at startup. Stops once minTracksReady files exist on disk.
+// SyncPlaylist downloads tracks from the configured playlists that aren't already cached.
+// Runs in the background at startup.
 func SyncPlaylist(ctx context.Context, ytdlpPath, cacheDir string) {
 	if err := os.MkdirAll(cacheDir, 0755); err != nil {
 		log.Printf("[auto-dj] failed to create cache dir: %v", err)
@@ -237,27 +238,7 @@ func SyncPlaylist(ctx context.Context, ytdlpPath, cacheDir string) {
 		os.Remove(f)
 	}
 
-	// Check how many files are already on disk
-	fileCount := countCachedFiles(cacheDir)
-	if fileCount >= minTracksReady {
-		log.Printf("[auto-dj] already have %d files on disk (>= %d), skipping sync", fileCount, minTracksReady)
-		return
-	}
-
-	log.Printf("[auto-dj] have %d files on disk, syncing playlist...", fileCount)
-
-	// Fetch playlist metadata via yt-dlp
-	cmd := exec.CommandContext(ctx, ytdlpPath,
-		"--flat-playlist",
-		"--dump-json",
-		"--no-warnings",
-		playlistURL,
-	)
-	output, err := cmd.Output()
-	if err != nil {
-		log.Printf("[auto-dj] failed to fetch playlist: %v", err)
-		return
-	}
+	log.Printf("[auto-dj] syncing playlists...")
 
 	type playlistEntry struct {
 		ID       string `json:"id"`
@@ -266,16 +247,34 @@ func SyncPlaylist(ctx context.Context, ytdlpPath, cacheDir string) {
 		Channel  string `json:"channel"`
 	}
 
+	// Fetch playlist metadata from all playlists via yt-dlp
 	var entries []playlistEntry
-	for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
-		if line == "" {
+	for _, plURL := range playlistURLs {
+		cmd := exec.CommandContext(ctx, ytdlpPath,
+			"--flat-playlist",
+			"--dump-json",
+			"--no-warnings",
+			plURL,
+		)
+		output, err := cmd.Output()
+		if err != nil {
+			log.Printf("[auto-dj] failed to fetch playlist %s: %v", plURL, err)
 			continue
 		}
-		var e playlistEntry
-		if err := json.Unmarshal([]byte(line), &e); err != nil {
-			continue
+		for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+			if line == "" {
+				continue
+			}
+			var e playlistEntry
+			if err := json.Unmarshal([]byte(line), &e); err != nil {
+				continue
+			}
+			entries = append(entries, e)
 		}
-		entries = append(entries, e)
+	}
+	if len(entries) == 0 {
+		log.Printf("[auto-dj] no entries found from any playlist")
+		return
 	}
 
 	log.Printf("[auto-dj] playlist has %d entries", len(entries))
@@ -284,11 +283,6 @@ func SyncPlaylist(ctx context.Context, ytdlpPath, cacheDir string) {
 		if ctx.Err() != nil {
 			return
 		}
-		if countCachedFiles(cacheDir) >= minTracksReady {
-			log.Printf("[auto-dj] reached %d+ files, stopping", minTracksReady)
-			return
-		}
-
 		// Skip if file already exists on disk
 		outputPath := filepath.Join(cacheDir, entry.ID+".opus")
 		if _, err := os.Stat(outputPath); err == nil {
@@ -317,7 +311,7 @@ func SyncPlaylist(ctx context.Context, ytdlpPath, cacheDir string) {
 			os.WriteFile(filepath.Join(cacheDir, entry.ID+".json"), metaJSON, 0644)
 		}
 
-		log.Printf("[auto-dj] downloaded %d/%d: %s", countCachedFiles(cacheDir), minTracksReady, entry.Title)
+		log.Printf("[auto-dj] downloaded: %s", entry.Title)
 	}
 
 	log.Printf("[auto-dj] sync complete, %d tracks available", countCachedFiles(cacheDir))
