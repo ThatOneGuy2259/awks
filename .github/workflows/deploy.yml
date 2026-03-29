@@ -29,4 +29,4 @@ jobs:
 
       - name: Deploy
         run: |
-          ssh deploy-target 'cd ~/Desktop/awks && git pull origin main && ./deploy.sh --rebuild && sudo systemctl restart awks'
+          ssh deploy-target 'cd ~/Desktop/awks && git pull origin main && sudo systemctl stop awks && ./deploy.sh --rebuild --build-only && sudo systemctl start awks'
