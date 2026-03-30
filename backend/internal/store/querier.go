@@ -6,23 +6,21 @@ package store
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
 	CastSkipVote(ctx context.Context, arg CastSkipVoteParams) error
 	ClearHistory(ctx context.Context) error
 	CountPendingAutoDJ(ctx context.Context) (int64, error)
-	CountSkipVotes(ctx context.Context, queueID pgtype.UUID) (int64, error)
+	CountSkipVotes(ctx context.Context, queueID string) (int64, error)
 	CountUserPendingTracks(ctx context.Context, requestedBy string) (int64, error)
 	CreateTimeout(ctx context.Context, arg CreateTimeoutParams) (UserTimeout, error)
-	DeleteHistoryEntry(ctx context.Context, id pgtype.UUID) error
+	DeleteHistoryEntry(ctx context.Context, id string) error
 	DeletePendingAutoDJ(ctx context.Context) error
-	DeleteQueueItem(ctx context.Context, id pgtype.UUID) error
-	DeleteSkipVotesForTrack(ctx context.Context, queueID pgtype.UUID) error
+	DeleteQueueItem(ctx context.Context, id string) error
+	DeleteSkipVotesForTrack(ctx context.Context, queueID string) error
 	DeleteTimeout(ctx context.Context, userID string) error
-	GetActiveQueueIDs(ctx context.Context) ([]pgtype.UUID, error)
+	GetActiveQueueIDs(ctx context.Context) ([]string, error)
 	GetActiveTimeout(ctx context.Context, userID string) (UserTimeout, error)
 	GetAllSettings(ctx context.Context) ([]AdminSetting, error)
 	GetCurrentlyPlaying(ctx context.Context) (GetCurrentlyPlayingRow, error)
@@ -32,15 +30,15 @@ type Querier interface {
 	GetNextReadyPending(ctx context.Context) (GetNextReadyPendingRow, error)
 	GetPendingExtractions(ctx context.Context) ([]GetPendingExtractionsRow, error)
 	GetQueue(ctx context.Context) ([]GetQueueRow, error)
-	GetQueueItem(ctx context.Context, id pgtype.UUID) (Queue, error)
+	GetQueueItem(ctx context.Context, id string) (Queue, error)
 	GetSetting(ctx context.Context, key string) (string, error)
 	GetUser(ctx context.Context, id string) (User, error)
 	GetUserRole(ctx context.Context, id string) (string, error)
-	HasUserVoted(ctx context.Context, arg HasUserVotedParams) (bool, error)
+	HasUserVoted(ctx context.Context, arg HasUserVotedParams) (int64, error)
 	InsertHistory(ctx context.Context, arg InsertHistoryParams) error
 	InsertQueueItem(ctx context.Context, arg InsertQueueItemParams) (Queue, error)
-	IsVideoInQueue(ctx context.Context, videoID string) (bool, error)
-	MoveToTop(ctx context.Context, id pgtype.UUID) error
+	IsVideoInQueue(ctx context.Context, videoID string) (int64, error)
+	MoveToTop(ctx context.Context, id string) error
 	RetractSkipVote(ctx context.Context, arg RetractSkipVoteParams) error
 	UpdateAudioStatus(ctx context.Context, arg UpdateAudioStatusParams) error
 	UpdateDuration(ctx context.Context, arg UpdateDurationParams) error

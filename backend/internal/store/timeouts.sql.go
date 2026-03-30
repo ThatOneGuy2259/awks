@@ -7,25 +7,26 @@ package store
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
 const createTimeout = `-- name: CreateTimeout :one
-INSERT INTO user_timeouts (user_id, issued_by, reason, expires_at)
-VALUES ($1, $2, $3, $4)
+INSERT INTO user_timeouts (id, user_id, issued_by, reason, expires_at)
+VALUES (?, ?, ?, ?, ?)
 RETURNING id, user_id, issued_by, reason, expires_at, created_at
 `
 
 type CreateTimeoutParams struct {
-	UserID    string             `json:"user_id"`
-	IssuedBy  string             `json:"issued_by"`
-	Reason    pgtype.Text        `json:"reason"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
+	IssuedBy  string         `json:"issued_by"`
+	Reason    sql.NullString `json:"reason"`
+	ExpiresAt string         `json:"expires_at"`
 }
 
 func (q *Queries) CreateTimeout(ctx context.Context, arg CreateTimeoutParams) (UserTimeout, error) {
-	row := q.db.QueryRow(ctx, createTimeout,
+	row := q.db.QueryRowContext(ctx, createTimeout,
+		arg.ID,
 		arg.UserID,
 		arg.IssuedBy,
 		arg.Reason,
@@ -44,23 +45,23 @@ func (q *Queries) CreateTimeout(ctx context.Context, arg CreateTimeoutParams) (U
 }
 
 const deleteTimeout = `-- name: DeleteTimeout :exec
-DELETE FROM user_timeouts WHERE user_id = $1 AND expires_at > now()
+DELETE FROM user_timeouts WHERE user_id = ? AND expires_at > datetime('now')
 `
 
 func (q *Queries) DeleteTimeout(ctx context.Context, userID string) error {
-	_, err := q.db.Exec(ctx, deleteTimeout, userID)
+	_, err := q.db.ExecContext(ctx, deleteTimeout, userID)
 	return err
 }
 
 const getActiveTimeout = `-- name: GetActiveTimeout :one
 SELECT id, user_id, issued_by, reason, expires_at, created_at FROM user_timeouts
-WHERE user_id = $1 AND expires_at > now()
+WHERE user_id = ? AND expires_at > datetime('now')
 ORDER BY expires_at DESC
 LIMIT 1
 `
 
 func (q *Queries) GetActiveTimeout(ctx context.Context, userID string) (UserTimeout, error) {
-	row := q.db.QueryRow(ctx, getActiveTimeout, userID)
+	row := q.db.QueryRowContext(ctx, getActiveTimeout, userID)
 	var i UserTimeout
 	err := row.Scan(
 		&i.ID,

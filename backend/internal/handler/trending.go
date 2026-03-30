@@ -2,11 +2,10 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type trendingCache struct {
@@ -15,13 +14,13 @@ type trendingCache struct {
 }
 
 type TrendingHandler struct {
-	pool  *pgxpool.Pool
+	db    *sql.DB
 	mu    sync.RWMutex
 	cache *trendingCache
 }
 
-func NewTrendingHandler(pool *pgxpool.Pool) *TrendingHandler {
-	return &TrendingHandler{pool: pool}
+func NewTrendingHandler(db *sql.DB) *TrendingHandler {
+	return &TrendingHandler{db: db}
 }
 
 type trendingTagsResponse struct {
@@ -53,13 +52,13 @@ func (h *TrendingHandler) queryTrendingTags(ctx context.Context) []string {
 	recentQuery := `
 		SELECT artist, COUNT(*) as cnt
 		FROM play_history
-		WHERE played_at > NOW() - INTERVAL '24 hours'
+		WHERE played_at > datetime('now', '-24 hours')
 		  AND artist IS NOT NULL AND artist != ''
 		GROUP BY artist
 		ORDER BY cnt DESC
 		LIMIT 8`
 
-	tags := queryArtists(ctx, h.pool, recentQuery)
+	tags := queryArtists(ctx, h.db, recentQuery)
 
 	if len(tags) >= 6 {
 		return tags
@@ -73,7 +72,7 @@ func (h *TrendingHandler) queryTrendingTags(ctx context.Context) []string {
 		ORDER BY cnt DESC
 		LIMIT 8`
 
-	allTime := queryArtists(ctx, h.pool, allTimeQuery)
+	allTime := queryArtists(ctx, h.db, allTimeQuery)
 
 	seen := make(map[string]bool, len(tags))
 	for _, t := range tags {
@@ -92,8 +91,8 @@ func (h *TrendingHandler) queryTrendingTags(ctx context.Context) []string {
 	return tags
 }
 
-func queryArtists(ctx context.Context, pool *pgxpool.Pool, query string) []string {
-	rows, err := pool.Query(ctx, query)
+func queryArtists(ctx context.Context, db *sql.DB, query string) []string {
+	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
 		return []string{}
 	}

@@ -19,7 +19,10 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"database/sql"
+
+	"github.com/google/uuid"
+	_ "modernc.org/sqlite"
 	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/auth"
 	"github.com/mccann/awks3/backend/internal/autodj"
@@ -45,41 +48,31 @@ func main() {
 	}
 
 	// Database
-	pool, err := pgxpool.New(context.Background(), cfg.DatabaseURL)
+	db, err := sql.Open("sqlite", cfg.DatabasePath)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		log.Fatalf("failed to open database: %v", err)
 	}
-	defer pool.Close()
+	defer db.Close()
 
-	// Run migrations
-	if _, err := pool.Exec(context.Background(), readMigration("001_init.up.sql")); err != nil {
-		log.Printf("migration 001 warning (may already exist): %v", err)
+	db.Exec("PRAGMA journal_mode=WAL")
+	db.Exec("PRAGMA foreign_keys=ON")
+
+	// Run migration
+	if migSQL := readMigration("001_schema.up.sql"); migSQL != "" {
+		if _, err := db.ExecContext(context.Background(), migSQL); err != nil {
+			log.Printf("migration warning: %v", err)
+		}
 	}
-	if _, err := pool.Exec(context.Background(), readMigration("002_drop_username_unique.up.sql")); err != nil {
-		log.Printf("migration 002 warning: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(), readMigration("003_audio_status.up.sql")); err != nil {
-		log.Printf("migration 003 warning: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(), readMigration("004_skip_mode.up.sql")); err != nil {
-		log.Printf("migration 004 warning: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(), readMigration("005_queue_position_seq.up.sql")); err != nil {
-		log.Printf("migration 005 warning: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(), readMigration("006_history_index.up.sql")); err != nil {
-		log.Printf("migration 006 warning: %v", err)
-	}
-	if _, err := pool.Exec(context.Background(), readMigration("007_auto_dj.up.sql")); err != nil {
-		log.Printf("migration 007 warning: %v", err)
-	}
+
+	// Reset stale 'playing' tracks from previous run (playback state is in-memory, lost on restart)
+	db.ExecContext(context.Background(), "UPDATE queue SET status = 'pending' WHERE status = 'playing'")
 
 	// Clean up expired timeouts
-	if _, err := pool.Exec(context.Background(), "DELETE FROM user_timeouts WHERE expires_at < now()"); err != nil {
+	if _, err := db.ExecContext(context.Background(), "DELETE FROM user_timeouts WHERE expires_at < datetime('now')"); err != nil {
 		log.Printf("timeout cleanup warning: %v", err)
 	}
 
-	queries := store.New(pool)
+	queries := store.New(db)
 
 	// Audio Broadcaster (WebRTC)
 	broadcaster, err := audio.NewBroadcaster()
@@ -195,9 +188,10 @@ func main() {
 			return false
 		}
 		// Insert into queue with audio_status=ready and audio_path in one query
-		_, err := pool.Exec(ctx,
-			`INSERT INTO queue (youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status, audio_path)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, nextval('queue_position_seq'), 'ready', $8)`,
+		_, err := db.ExecContext(ctx,
+			`INSERT INTO queue (id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status, audio_path)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM queue), 'ready', ?)`,
+			uuid.New().String(),
 			fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID),
 			videoID, title, artist, duration,
 			fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", videoID),
@@ -279,7 +273,7 @@ func main() {
 	historyH := handler.NewHistoryHandler(queries)
 	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath, queries)
 	suggestH := handler.NewSuggestHandler()
-	trendingH := handler.NewTrendingHandler(pool)
+	trendingH := handler.NewTrendingHandler(db)
 	listenerH := handler.NewListenerHandler(hub)
 	meH := handler.NewMeHandler(queries)
 

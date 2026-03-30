@@ -1,14 +1,1 @@
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: awks
-      POSTGRES_PASSWORD: awks
-      POSTGRES_DB: awks
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
-volumes:
-  pgdata:
+# No external services required — SQLite is embedded

@@ -2,13 +2,15 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/auth"
 	"github.com/mccann/awks3/backend/internal/model"
@@ -39,21 +41,25 @@ func (h *QueueHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
 
 	tracks := make([]model.QueueTrack, 0, len(rows))
 	for _, row := range rows {
+		var createdAt time.Time
+		if t, err := time.Parse(time.RFC3339, row.CreatedAt); err == nil {
+			createdAt = t
+		}
 		tracks = append(tracks, model.QueueTrack{
-			ID:              row.ID.String(),
+			ID:              row.ID,
 			YouTubeURL:      row.YoutubeUrl,
 			VideoID:         row.VideoID,
 			Title:           row.Title,
-			Artist:          pgTextStr(row.Artist),
+			Artist:          nullStr(row.Artist),
 			DurationSec:     int(row.DurationSec),
-			ThumbnailURL:    pgTextStr(row.ThumbnailUrl),
+			ThumbnailURL:    nullStr(row.ThumbnailUrl),
 			RequestedBy:     row.RequestedBy,
 			RequesterName:   row.RequesterName,
-			RequesterAvatar: pgTextStr(row.RequesterAvatar),
+			RequesterAvatar: nullStr(row.RequesterAvatar),
 			Position:        int(row.Position),
 			Status:          row.Status,
 			AudioStatus:     row.AudioStatus,
-			CreatedAt:       row.CreatedAt.Time,
+			CreatedAt:       createdAt,
 		})
 	}
 	writeJSON(w, tracks)
@@ -70,7 +76,7 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	h.queries.UpsertUser(ctx, store.UpsertUserParams{
 		ID:        userID,
 		Username:  username,
-		AvatarUrl: pgtype.Text{String: avatarURL, Valid: avatarURL != ""},
+		AvatarUrl: sql.NullString{String: avatarURL, Valid: avatarURL != ""},
 		Role:      role,
 	})
 
@@ -84,7 +90,7 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
 	// Check timeout
 	timeout, err := h.queries.GetActiveTimeout(ctx, userID)
-	if err == nil && timeout.ID.Valid {
+	if err == nil && timeout.ID != "" {
 		http.Error(w, "you are timed out from requesting songs", http.StatusForbidden)
 		return
 	}
@@ -107,7 +113,7 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	exists, _ := h.queries.IsVideoInQueue(ctx, videoID)
-	if exists {
+	if exists != 0 {
 		http.Error(w, "song is already in the queue", http.StatusConflict)
 		return
 	}
@@ -125,12 +131,13 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	item, err := h.queries.InsertQueueItem(ctx, store.InsertQueueItemParams{
+		ID:           uuid.New().String(),
 		YoutubeUrl:   body.YouTubeURL,
 		VideoID:      meta.VideoID,
 		Title:        meta.Title,
-		Artist:       pgtype.Text{String: meta.Artist, Valid: meta.Artist != ""},
-		DurationSec:  int32(meta.DurationSec),
-		ThumbnailUrl: pgtype.Text{String: meta.ThumbnailURL, Valid: meta.ThumbnailURL != ""},
+		Artist:       sql.NullString{String: meta.Artist, Valid: meta.Artist != ""},
+		DurationSec:  int64(meta.DurationSec),
+		ThumbnailUrl: sql.NullString{String: meta.ThumbnailURL, Valid: meta.ThumbnailURL != ""},
 		RequestedBy:  userID,
 		AudioStatus:  "pending",
 	})
@@ -189,7 +196,7 @@ func (h *QueueHandler) CastSkipVote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.queries.CastSkipVote(ctx, store.CastSkipVoteParams{QueueID: id, UserID: userID})
+	h.queries.CastSkipVote(ctx, store.CastSkipVoteParams{ID: uuid.New().String(), QueueID: id, UserID: userID})
 	h.broadcastSkipVoteUpdate(ctx, id)
 
 	count, _ := h.queries.CountSkipVotes(ctx, id)
@@ -220,14 +227,14 @@ func (h *QueueHandler) broadcastQueueUpdate(ctx context.Context) {
 	h.hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
 }
 
-func (h *QueueHandler) broadcastSkipVoteUpdate(ctx context.Context, queueID pgtype.UUID) {
+func (h *QueueHandler) broadcastSkipVoteUpdate(ctx context.Context, queueID string) {
 	count, _ := h.queries.CountSkipVotes(ctx, queueID)
 	required := h.getSkipVotesRequired(ctx)
 
 	h.hub.Broadcast(model.WSMessage{
 		Type: "SKIP_VOTE_UPDATE",
 		Data: model.SkipVoteUpdateData{
-			QueueID:       queueID.String(),
+			QueueID:       queueID,
 			Votes:         int(count),
 			VotesRequired: required,
 		},
@@ -264,17 +271,18 @@ func (h *QueueHandler) getSkipVotesRequired(ctx context.Context) int {
 	return required
 }
 
-func pgTextStr(t pgtype.Text) string {
+func nullStr(t sql.NullString) string {
 	if t.Valid {
 		return t.String
 	}
 	return ""
 }
 
-func parseUUID(s string) (pgtype.UUID, error) {
-	var id pgtype.UUID
-	err := id.Scan(s)
-	return id, err
+func parseUUID(s string) (string, error) {
+	if s == "" {
+		return "", fmt.Errorf("empty id")
+	}
+	return s, nil
 }
 
 func writeJSON(w http.ResponseWriter, data interface{}) {

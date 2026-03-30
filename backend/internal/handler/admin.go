@@ -1,13 +1,14 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 	"github.com/mccann/awks3/backend/internal/auth"
 	"github.com/mccann/awks3/backend/internal/model"
 	"github.com/mccann/awks3/backend/internal/service"
@@ -98,10 +99,11 @@ func (h *AdminHandler) TimeoutUser(w http.ResponseWriter, r *http.Request) {
 
 	expiresAt := time.Now().Add(time.Duration(body.Minutes) * time.Minute)
 	timeout, err := h.queries.CreateTimeout(r.Context(), store.CreateTimeoutParams{
-		UserID:   userID,
-		IssuedBy: adminID,
-		Reason:   pgtype.Text{String: body.Reason, Valid: body.Reason != ""},
-		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ID:        uuid.New().String(),
+		UserID:    userID,
+		IssuedBy:  adminID,
+		Reason:    sql.NullString{String: body.Reason, Valid: body.Reason != ""},
+		ExpiresAt: expiresAt.Format(time.RFC3339),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -129,13 +131,13 @@ func (h *AdminHandler) RemoveTimeout(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) GetTimeout(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "id")
 	timeout, err := h.queries.GetActiveTimeout(r.Context(), userID)
-	if err != nil || !timeout.ID.Valid {
+	if err != nil || timeout.ID == "" {
 		writeJSON(w, map[string]bool{"timed_out": false})
 		return
 	}
 	writeJSON(w, map[string]interface{}{
 		"timed_out":  true,
-		"expires_at": timeout.ExpiresAt.Time.Format(time.RFC3339),
-		"reason":     pgTextStr(timeout.Reason),
+		"expires_at": timeout.ExpiresAt,
+		"reason":     nullStr(timeout.Reason),
 	})
 }

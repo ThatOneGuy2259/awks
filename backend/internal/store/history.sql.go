@@ -7,8 +7,7 @@ package store
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
 const clearHistory = `-- name: ClearHistory :exec
@@ -16,16 +15,16 @@ DELETE FROM play_history
 `
 
 func (q *Queries) ClearHistory(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, clearHistory)
+	_, err := q.db.ExecContext(ctx, clearHistory)
 	return err
 }
 
 const deleteHistoryEntry = `-- name: DeleteHistoryEntry :exec
-DELETE FROM play_history WHERE id = $1
+DELETE FROM play_history WHERE id = ?
 `
 
-func (q *Queries) DeleteHistoryEntry(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteHistoryEntry, id)
+func (q *Queries) DeleteHistoryEntry(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteHistoryEntry, id)
 	return err
 }
 
@@ -34,28 +33,28 @@ SELECT h.id, h.video_id, h.title, h.artist, h.duration_sec, h.requested_by, h.pl
 FROM play_history h
 JOIN users u ON h.requested_by = u.id
 ORDER BY h.played_at DESC
-LIMIT $1 OFFSET $2
+LIMIT ? OFFSET ?
 `
 
 type GetHistoryParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
 }
 
 type GetHistoryRow struct {
-	ID            pgtype.UUID        `json:"id"`
-	VideoID       string             `json:"video_id"`
-	Title         string             `json:"title"`
-	Artist        pgtype.Text        `json:"artist"`
-	DurationSec   int32              `json:"duration_sec"`
-	RequestedBy   string             `json:"requested_by"`
-	PlayedAt      pgtype.Timestamptz `json:"played_at"`
-	Skipped       bool               `json:"skipped"`
-	RequesterName string             `json:"requester_name"`
+	ID            string         `json:"id"`
+	VideoID       string         `json:"video_id"`
+	Title         string         `json:"title"`
+	Artist        sql.NullString `json:"artist"`
+	DurationSec   int64          `json:"duration_sec"`
+	RequestedBy   string         `json:"requested_by"`
+	PlayedAt      string         `json:"played_at"`
+	Skipped       int64          `json:"skipped"`
+	RequesterName string         `json:"requester_name"`
 }
 
 func (q *Queries) GetHistory(ctx context.Context, arg GetHistoryParams) ([]GetHistoryRow, error) {
-	rows, err := q.db.Query(ctx, getHistory, arg.Limit, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, getHistory, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
@@ -78,6 +77,9 @@ func (q *Queries) GetHistory(ctx context.Context, arg GetHistoryParams) ([]GetHi
 		}
 		items = append(items, i)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -85,22 +87,24 @@ func (q *Queries) GetHistory(ctx context.Context, arg GetHistoryParams) ([]GetHi
 }
 
 const insertHistory = `-- name: InsertHistory :exec
-INSERT INTO play_history (video_id, title, artist, duration_sec, requested_by, played_at, skipped)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO play_history (id, video_id, title, artist, duration_sec, requested_by, played_at, skipped)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertHistoryParams struct {
-	VideoID     string             `json:"video_id"`
-	Title       string             `json:"title"`
-	Artist      pgtype.Text        `json:"artist"`
-	DurationSec int32              `json:"duration_sec"`
-	RequestedBy string             `json:"requested_by"`
-	PlayedAt    pgtype.Timestamptz `json:"played_at"`
-	Skipped     bool               `json:"skipped"`
+	ID          string         `json:"id"`
+	VideoID     string         `json:"video_id"`
+	Title       string         `json:"title"`
+	Artist      sql.NullString `json:"artist"`
+	DurationSec int64          `json:"duration_sec"`
+	RequestedBy string         `json:"requested_by"`
+	PlayedAt    string         `json:"played_at"`
+	Skipped     int64          `json:"skipped"`
 }
 
 func (q *Queries) InsertHistory(ctx context.Context, arg InsertHistoryParams) error {
-	_, err := q.db.Exec(ctx, insertHistory,
+	_, err := q.db.ExecContext(ctx, insertHistory,
+		arg.ID,
 		arg.VideoID,
 		arg.Title,
 		arg.Artist,

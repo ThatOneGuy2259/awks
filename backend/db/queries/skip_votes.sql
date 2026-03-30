@@ -1,15 +1,15 @@
 -- name: CastSkipVote :exec
-INSERT INTO skip_votes (queue_id, user_id) VALUES ($1, $2)
+INSERT INTO skip_votes (id, queue_id, user_id) VALUES (?, ?, ?)
 ON CONFLICT (queue_id, user_id) DO NOTHING;
 
 -- name: RetractSkipVote :exec
-DELETE FROM skip_votes WHERE queue_id = $1 AND user_id = $2;
+DELETE FROM skip_votes WHERE queue_id = ? AND user_id = ?;
 
 -- name: CountSkipVotes :one
-SELECT COUNT(*) FROM skip_votes WHERE queue_id = $1;
+SELECT COUNT(*) FROM skip_votes WHERE queue_id = ?;
 
 -- name: HasUserVoted :one
-SELECT EXISTS(SELECT 1 FROM skip_votes WHERE queue_id = $1 AND user_id = $2);
+SELECT EXISTS(SELECT 1 FROM skip_votes WHERE queue_id = ? AND user_id = ?);
 
 -- name: DeleteSkipVotesForTrack :exec
-DELETE FROM skip_votes WHERE queue_id = $1;
+DELETE FROM skip_votes WHERE queue_id = ?;

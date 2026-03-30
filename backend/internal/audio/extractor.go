@@ -2,6 +2,7 @@ package audio
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mccann/awks3/backend/internal/store"
 )
 
@@ -37,38 +37,36 @@ func NewExtractor(ytdlpPath, cacheDir string, queries store.Querier, onReady fun
 
 // Extract starts an async extraction for the given queue item.
 // It updates audio_status in the database as it progresses.
-func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
-	idStr := queueID.String()
-
+func (e *Extractor) Extract(queueID string, youtubeURL string) {
 	e.mu.Lock()
-	if e.inProgress[idStr] {
+	if e.inProgress[queueID] {
 		e.mu.Unlock()
 		return
 	}
-	e.inProgress[idStr] = true
+	e.inProgress[queueID] = true
 	e.mu.Unlock()
 
 	go func() {
 		defer func() {
 			e.mu.Lock()
-			delete(e.inProgress, idStr)
+			delete(e.inProgress, queueID)
 			e.mu.Unlock()
 		}()
 
-		outputPath := filepath.Join(e.cacheDir, idStr+".opus")
+		outputPath := filepath.Join(e.cacheDir, queueID+".opus")
 
 		// Mark as extracting
 		e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 			ID:          queueID,
 			AudioStatus: "extracting",
-			AudioPath:   pgtype.Text{},
+			AudioPath:   sql.NullString{},
 		})
 		if e.onStatusChange != nil {
 			e.onStatusChange()
 		}
 
 		// Run yt-dlp to download best available audio
-		tmpBase := filepath.Join(e.cacheDir, idStr+"-tmp")
+		tmpBase := filepath.Join(e.cacheDir, queueID+"-tmp")
 		cmd := exec.Command(e.ytdlpPath,
 			"-f", "bestaudio",
 			"--no-playlist",
@@ -79,11 +77,11 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			log.Printf("[extractor] yt-dlp failed for %s: %v\n%s", idStr, err, string(output))
+			log.Printf("[extractor] yt-dlp failed for %s: %v\n%s", queueID, err, string(output))
 			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 				ID:          queueID,
 				AudioStatus: "failed",
-				AudioPath:   pgtype.Text{},
+				AudioPath:   sql.NullString{},
 			})
 			if e.onStatusChange != nil {
 				e.onStatusChange()
@@ -94,11 +92,11 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 		// Find the downloaded file (extension varies by source)
 		matches, _ := filepath.Glob(tmpBase + ".*")
 		if len(matches) == 0 {
-			log.Printf("[extractor] no downloaded file found for %s", idStr)
+			log.Printf("[extractor] no downloaded file found for %s", queueID)
 			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 				ID:          queueID,
 				AudioStatus: "failed",
-				AudioPath:   pgtype.Text{},
+				AudioPath:   sql.NullString{},
 			})
 			if e.onStatusChange != nil {
 				e.onStatusChange()
@@ -117,11 +115,11 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 		repackOut, repackErr := repackCmd.CombinedOutput()
 		os.Remove(tmpPath)
 		if repackErr != nil {
-			log.Printf("[extractor] ffmpeg conversion failed for %s: %v\n%s", idStr, repackErr, string(repackOut))
+			log.Printf("[extractor] ffmpeg conversion failed for %s: %v\n%s", queueID, repackErr, string(repackOut))
 			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 				ID:          queueID,
 				AudioStatus: "failed",
-				AudioPath:   pgtype.Text{},
+				AudioPath:   sql.NullString{},
 			})
 			if e.onStatusChange != nil {
 				e.onStatusChange()
@@ -129,12 +127,12 @@ func (e *Extractor) Extract(queueID pgtype.UUID, youtubeURL string) {
 			return
 		}
 
-		log.Printf("[extractor] extracted audio for %s -> %s", idStr, outputPath)
+		log.Printf("[extractor] extracted audio for %s -> %s", queueID, outputPath)
 
 		e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 			ID:          queueID,
 			AudioStatus: "ready",
-			AudioPath:   pgtype.Text{String: outputPath, Valid: true},
+			AudioPath:   sql.NullString{String: outputPath, Valid: true},
 		})
 		if e.onStatusChange != nil {
 			e.onStatusChange()
@@ -155,7 +153,7 @@ func (e *Extractor) ExtractPending(ctx context.Context) {
 		return
 	}
 	for _, row := range rows {
-		log.Printf("[extractor] re-queuing extraction for %s", row.ID.String())
+		log.Printf("[extractor] re-queuing extraction for %s", row.ID)
 		e.Extract(row.ID, row.YoutubeUrl)
 	}
 }
@@ -169,7 +167,7 @@ func (e *Extractor) CleanupOrphans(ctx context.Context) error {
 
 	activeSet := make(map[string]bool)
 	for _, id := range activeIDs {
-		activeSet[id.String()] = true
+		activeSet[id] = true
 	}
 
 	matches, err := filepath.Glob(filepath.Join(e.cacheDir, "*.opus"))

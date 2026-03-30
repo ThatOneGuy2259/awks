@@ -1,11 +1,11 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mccann/awks3/backend/internal/auth"
 	"github.com/mccann/awks3/backend/internal/store"
 )
@@ -28,7 +28,7 @@ func (h *MeHandler) SyncMe(w http.ResponseWriter, r *http.Request) {
 	user, err := h.queries.UpsertUser(r.Context(), store.UpsertUserParams{
 		ID:        userID,
 		Username:  username,
-		AvatarUrl: pgtype.Text{String: avatarURL, Valid: avatarURL != ""},
+		AvatarUrl: sql.NullString{String: avatarURL, Valid: avatarURL != ""},
 		Role:      role,
 	})
 	if err != nil {

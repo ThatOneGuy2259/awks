@@ -11,7 +11,7 @@ ORDER BY q.position ASC;
 -- name: GetQueueItem :one
 SELECT id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url,
        requested_by, position, status, created_at, audio_status, audio_path
-FROM queue WHERE id = $1;
+FROM queue WHERE id = ?;
 
 -- name: GetCurrentlyPlaying :one
 SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec,
@@ -32,28 +32,28 @@ ORDER BY position ASC
 LIMIT 1;
 
 -- name: InsertQueueItem :one
-INSERT INTO queue (youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, nextval('queue_position_seq'), $8)
+INSERT INTO queue (id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM queue), ?)
 RETURNING *;
 
 -- name: UpdateQueueStatus :exec
-UPDATE queue SET status = $2 WHERE queue.id = $1;
+UPDATE queue SET status = ? WHERE queue.id = ?;
 
 -- name: DeleteQueueItem :exec
-DELETE FROM queue WHERE queue.id = $1;
+DELETE FROM queue WHERE queue.id = ?;
 
 -- name: MoveToTop :exec
-UPDATE queue SET position = (SELECT MIN(position) - 1 FROM queue WHERE queue.status = 'pending')
-WHERE queue.id = $1;
+UPDATE queue SET position = (SELECT MIN(position) - 1 FROM queue WHERE status = 'pending')
+WHERE queue.id = ?;
 
 -- name: CountUserPendingTracks :one
-SELECT COUNT(*) FROM queue WHERE requested_by = $1 AND status IN ('pending', 'playing');
+SELECT COUNT(*) FROM queue WHERE requested_by = ? AND status IN ('pending', 'playing');
 
 -- name: IsVideoInQueue :one
-SELECT EXISTS(SELECT 1 FROM queue WHERE video_id = $1 AND status IN ('pending', 'playing'));
+SELECT EXISTS(SELECT 1 FROM queue WHERE video_id = ? AND status IN ('pending', 'playing'));
 
 -- name: UpdateAudioStatus :exec
-UPDATE queue SET audio_status = $2, audio_path = $3 WHERE queue.id = $1;
+UPDATE queue SET audio_status = ?, audio_path = ? WHERE id = ?;
 
 -- name: GetPendingExtractions :many
 SELECT id, youtube_url, video_id
@@ -89,4 +89,4 @@ DELETE FROM queue WHERE requested_by = 'auto-dj' AND status = 'pending';
 SELECT COUNT(*) FROM queue WHERE requested_by = 'auto-dj' AND status IN ('pending', 'playing');
 
 -- name: UpdateDuration :exec
-UPDATE queue SET duration_sec = $2 WHERE queue.id = $1;
+UPDATE queue SET duration_sec = ? WHERE id = ?;

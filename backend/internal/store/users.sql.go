@@ -7,16 +7,15 @@ package store
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
 const getUser = `-- name: GetUser :one
-SELECT id, username, avatar_url, role, created_at, updated_at FROM users WHERE id = $1
+SELECT id, username, avatar_url, role, created_at, updated_at FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
-	row := q.db.QueryRow(ctx, getUser, id)
+	row := q.db.QueryRowContext(ctx, getUser, id)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -30,11 +29,11 @@ func (q *Queries) GetUser(ctx context.Context, id string) (User, error) {
 }
 
 const getUserRole = `-- name: GetUserRole :one
-SELECT role FROM users WHERE id = $1
+SELECT role FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUserRole(ctx context.Context, id string) (string, error) {
-	row := q.db.QueryRow(ctx, getUserRole, id)
+	row := q.db.QueryRowContext(ctx, getUserRole, id)
 	var role string
 	err := row.Scan(&role)
 	return role, err
@@ -42,24 +41,24 @@ func (q *Queries) GetUserRole(ctx context.Context, id string) (string, error) {
 
 const upsertUser = `-- name: UpsertUser :one
 INSERT INTO users (id, username, avatar_url, role)
-VALUES ($1, $2, $3, $4)
+VALUES (?, ?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET
     username = EXCLUDED.username,
     avatar_url = EXCLUDED.avatar_url,
     role = EXCLUDED.role,
-    updated_at = now()
+    updated_at = datetime('now')
 RETURNING id, username, avatar_url, role, created_at, updated_at
 `
 
 type UpsertUserParams struct {
-	ID        string      `json:"id"`
-	Username  string      `json:"username"`
-	AvatarUrl pgtype.Text `json:"avatar_url"`
-	Role      string      `json:"role"`
+	ID        string         `json:"id"`
+	Username  string         `json:"username"`
+	AvatarUrl sql.NullString `json:"avatar_url"`
+	Role      string         `json:"role"`
 }
 
 func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, upsertUser,
+	row := q.db.QueryRowContext(ctx, upsertUser,
 		arg.ID,
 		arg.Username,
 		arg.AvatarUrl,

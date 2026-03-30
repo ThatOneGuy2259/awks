@@ -10,7 +10,7 @@ import (
 
 type Config struct {
 	Port           string
-	DatabaseURL    string
+	DatabasePath   string
 	ClerkSecretKey string
 	YouTubeAPIKey  string
 	CORSOrigin     string
@@ -27,7 +27,7 @@ func Load() *Config {
 
 	return &Config{
 		Port:           getEnv("PORT", "8080"),
-		DatabaseURL:    getEnv("DATABASE_URL", "postgres://awks:awks@localhost:5432/awks?sslmode=disable"),
+		DatabasePath:   getEnv("DATABASE_PATH", "./awks.db"),
 		ClerkSecretKey: getEnv("CLERK_SECRET_KEY", ""),
 		YouTubeAPIKey:  getEnv("YOUTUBE_API_KEY", ""),
 		CORSOrigin:     getEnv("CORS_ORIGIN", "http://localhost:5173"),

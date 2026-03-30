@@ -7,71 +7,70 @@ package store
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const castSkipVote = `-- name: CastSkipVote :exec
-INSERT INTO skip_votes (queue_id, user_id) VALUES ($1, $2)
+INSERT INTO skip_votes (id, queue_id, user_id) VALUES (?, ?, ?)
 ON CONFLICT (queue_id, user_id) DO NOTHING
 `
 
 type CastSkipVoteParams struct {
-	QueueID pgtype.UUID `json:"queue_id"`
-	UserID  string      `json:"user_id"`
+	ID      string `json:"id"`
+	QueueID string `json:"queue_id"`
+	UserID  string `json:"user_id"`
 }
 
 func (q *Queries) CastSkipVote(ctx context.Context, arg CastSkipVoteParams) error {
-	_, err := q.db.Exec(ctx, castSkipVote, arg.QueueID, arg.UserID)
+	_, err := q.db.ExecContext(ctx, castSkipVote, arg.ID, arg.QueueID, arg.UserID)
 	return err
 }
 
 const countSkipVotes = `-- name: CountSkipVotes :one
-SELECT COUNT(*) FROM skip_votes WHERE queue_id = $1
+SELECT COUNT(*) FROM skip_votes WHERE queue_id = ?
 `
 
-func (q *Queries) CountSkipVotes(ctx context.Context, queueID pgtype.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, countSkipVotes, queueID)
+func (q *Queries) CountSkipVotes(ctx context.Context, queueID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSkipVotes, queueID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
 const deleteSkipVotesForTrack = `-- name: DeleteSkipVotesForTrack :exec
-DELETE FROM skip_votes WHERE queue_id = $1
+DELETE FROM skip_votes WHERE queue_id = ?
 `
 
-func (q *Queries) DeleteSkipVotesForTrack(ctx context.Context, queueID pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteSkipVotesForTrack, queueID)
+func (q *Queries) DeleteSkipVotesForTrack(ctx context.Context, queueID string) error {
+	_, err := q.db.ExecContext(ctx, deleteSkipVotesForTrack, queueID)
 	return err
 }
 
 const hasUserVoted = `-- name: HasUserVoted :one
-SELECT EXISTS(SELECT 1 FROM skip_votes WHERE queue_id = $1 AND user_id = $2)
+SELECT EXISTS(SELECT 1 FROM skip_votes WHERE queue_id = ? AND user_id = ?)
 `
 
 type HasUserVotedParams struct {
-	QueueID pgtype.UUID `json:"queue_id"`
-	UserID  string      `json:"user_id"`
+	QueueID string `json:"queue_id"`
+	UserID  string `json:"user_id"`
 }
 
-func (q *Queries) HasUserVoted(ctx context.Context, arg HasUserVotedParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasUserVoted, arg.QueueID, arg.UserID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+func (q *Queries) HasUserVoted(ctx context.Context, arg HasUserVotedParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUserVoted, arg.QueueID, arg.UserID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const retractSkipVote = `-- name: RetractSkipVote :exec
-DELETE FROM skip_votes WHERE queue_id = $1 AND user_id = $2
+DELETE FROM skip_votes WHERE queue_id = ? AND user_id = ?
 `
 
 type RetractSkipVoteParams struct {
-	QueueID pgtype.UUID `json:"queue_id"`
-	UserID  string      `json:"user_id"`
+	QueueID string `json:"queue_id"`
+	UserID  string `json:"user_id"`
 }
 
 func (q *Queries) RetractSkipVote(ctx context.Context, arg RetractSkipVoteParams) error {
-	_, err := q.db.Exec(ctx, retractSkipVote, arg.QueueID, arg.UserID)
+	_, err := q.db.ExecContext(ctx, retractSkipVote, arg.QueueID, arg.UserID)
 	return err
 }
