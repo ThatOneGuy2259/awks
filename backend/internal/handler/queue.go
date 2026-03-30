@@ -163,6 +163,8 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) DeleteFromQueue(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	role := auth.GetRole(r.Context())
 	idStr := chi.URLParam(r, "id")
 	id, err := parseUUID(idStr)
 	if err != nil {
@@ -173,6 +175,12 @@ func (h *QueueHandler) DeleteFromQueue(w http.ResponseWriter, r *http.Request) {
 	item, err := h.queries.GetQueueItem(r.Context(), id)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	// Only the requester or an admin can remove a track
+	if item.RequestedBy != userID && role != "admin" {
+		http.Error(w, "you can only remove your own songs", http.StatusForbidden)
 		return
 	}
 

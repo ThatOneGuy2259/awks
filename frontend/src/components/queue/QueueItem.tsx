@@ -11,6 +11,8 @@ interface QueueItemProps {
 
 export const QueueItem = memo(function QueueItem({ track, index }: QueueItemProps) {
   const isAdmin = useUserStore((s) => s.role === 'admin');
+  const userId = useUserStore((s) => s.id);
+  const canRemove = isAdmin || track.requested_by === userId;
 
   const handleRemove = async () => {
     try {
@@ -88,7 +90,7 @@ export const QueueItem = memo(function QueueItem({ track, index }: QueueItemProp
         </div>
       )}
       <div className="flex items-center gap-3">
-        {isAdmin && (
+        {canRemove && (
           <button
             onClick={handleRemove}
             className="p-2 text-on-surface-variant hover:text-error transition-colors"

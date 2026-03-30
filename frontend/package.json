@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.4",
+    "@mkody/twitch-emoticons": "^3.0.0-beta.4",
     "@tailwindcss/vite": "^4.2.2",
     "emoji-picker-react": "^4.18.0",
     "react": "^19.2.4",
