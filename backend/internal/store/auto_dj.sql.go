@@ -7,17 +7,16 @@ package store
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
 const autoDJTrackExists = `-- name: AutoDJTrackExists :one
-SELECT EXISTS(SELECT 1 FROM auto_dj_tracks WHERE video_id = $1)
+SELECT EXISTS(SELECT 1 FROM auto_dj_tracks WHERE video_id = ?)
 `
 
-func (q *Queries) AutoDJTrackExists(ctx context.Context, videoID string) (bool, error) {
-	row := q.db.QueryRow(ctx, autoDJTrackExists, videoID)
-	var exists bool
+func (q *Queries) AutoDJTrackExists(ctx context.Context, videoID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, autoDJTrackExists, videoID)
+	var exists int64
 	err := row.Scan(&exists)
 	return exists, err
 }
@@ -27,7 +26,7 @@ SELECT COUNT(*) FROM auto_dj_tracks
 `
 
 func (q *Queries) GetAutoDJTrackCount(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, getAutoDJTrackCount)
+	row := q.db.QueryRowContext(ctx, getAutoDJTrackCount)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -41,16 +40,16 @@ LIMIT 1
 `
 
 type GetRandomAutoDJTrackRow struct {
-	ID          pgtype.UUID `json:"id"`
-	VideoID     string      `json:"video_id"`
-	Title       string      `json:"title"`
-	Artist      pgtype.Text `json:"artist"`
-	DurationSec int32       `json:"duration_sec"`
-	FilePath    string      `json:"file_path"`
+	ID          string         `json:"id"`
+	VideoID     string         `json:"video_id"`
+	Title       string         `json:"title"`
+	Artist      sql.NullString `json:"artist"`
+	DurationSec int64          `json:"duration_sec"`
+	FilePath    string         `json:"file_path"`
 }
 
 func (q *Queries) GetRandomAutoDJTrack(ctx context.Context) (GetRandomAutoDJTrackRow, error) {
-	row := q.db.QueryRow(ctx, getRandomAutoDJTrack)
+	row := q.db.QueryRowContext(ctx, getRandomAutoDJTrack)
 	var i GetRandomAutoDJTrackRow
 	err := row.Scan(
 		&i.ID,
@@ -65,20 +64,20 @@ func (q *Queries) GetRandomAutoDJTrack(ctx context.Context) (GetRandomAutoDJTrac
 
 const insertAutoDJTrack = `-- name: InsertAutoDJTrack :exec
 INSERT INTO auto_dj_tracks (video_id, title, artist, duration_sec, file_path)
-VALUES ($1, $2, $3, $4, $5)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT (video_id) DO NOTHING
 `
 
 type InsertAutoDJTrackParams struct {
-	VideoID     string      `json:"video_id"`
-	Title       string      `json:"title"`
-	Artist      pgtype.Text `json:"artist"`
-	DurationSec int32       `json:"duration_sec"`
-	FilePath    string      `json:"file_path"`
+	VideoID     string         `json:"video_id"`
+	Title       string         `json:"title"`
+	Artist      sql.NullString `json:"artist"`
+	DurationSec int64          `json:"duration_sec"`
+	FilePath    string         `json:"file_path"`
 }
 
 func (q *Queries) InsertAutoDJTrack(ctx context.Context, arg InsertAutoDJTrackParams) error {
-	_, err := q.db.Exec(ctx, insertAutoDJTrack,
+	_, err := q.db.ExecContext(ctx, insertAutoDJTrack,
 		arg.VideoID,
 		arg.Title,
 		arg.Artist,

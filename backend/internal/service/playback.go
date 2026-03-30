@@ -2,22 +2,22 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/model"
-	redisclient "github.com/mccann/awks3/backend/internal/redis"
 	"github.com/mccann/awks3/backend/internal/store"
 )
 
 type PlaybackService struct {
 	queries      store.Querier
-	redis        *redisclient.Client
+	state        *model.PlaybackState // in-memory playback state (replaces Redis)
 	wsbroadcast  func(msg model.WSMessage)
 	broadcaster  *audio.Broadcaster
 	preloadNext  func(ctx context.Context)
@@ -26,10 +26,9 @@ type PlaybackService struct {
 	mu           sync.Mutex
 }
 
-func NewPlaybackService(q store.Querier, r *redisclient.Client, wsbroadcast func(model.WSMessage), broadcaster *audio.Broadcaster) *PlaybackService {
+func NewPlaybackService(q store.Querier, wsbroadcast func(model.WSMessage), broadcaster *audio.Broadcaster) *PlaybackService {
 	s := &PlaybackService{
 		queries:     q,
-		redis:       r,
 		wsbroadcast: wsbroadcast,
 		broadcaster: broadcaster,
 		cleanupCh:   make(chan string, 64),
@@ -56,7 +55,9 @@ func (s *PlaybackService) SetAutoDJQueue(fn func(ctx context.Context) bool) {
 }
 
 func (s *PlaybackService) GetCurrentState(ctx context.Context) (*model.PlaybackState, error) {
-	return s.redis.GetPlaybackState(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state, nil
 }
 
 // AdvanceQueue marks the current track as played and starts the next ready track.
@@ -73,13 +74,14 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 			Status: "played",
 		})
 		s.queries.InsertHistory(ctx, store.InsertHistoryParams{
+			ID:          uuid.New().String(),
 			VideoID:     current.VideoID,
 			Title:       current.Title,
 			Artist:      current.Artist,
 			DurationSec: current.DurationSec,
 			RequestedBy: current.RequestedBy,
-			PlayedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
-			Skipped:     false,
+			PlayedAt:    time.Now().UTC().Format(time.RFC3339),
+			Skipped:     0,
 		})
 		s.queries.DeleteSkipVotesForTrack(ctx, current.ID)
 
@@ -102,7 +104,7 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 		}
 		if err != nil {
 			log.Println("No more tracks in queue, entering idle state")
-			s.redis.ClearPlaybackState(ctx)
+			s.state = nil
 			s.wsbroadcast(model.WSMessage{
 				Type: "TRACK_CHANGE",
 				Data: model.TrackChangeData{VideoID: ""},
@@ -125,18 +127,18 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 	}
 
 	state := &model.PlaybackState{
-		QueueID:        next.ID.String(),
+		QueueID:        next.ID,
 		VideoID:        next.VideoID,
 		Title:          next.Title,
-		Artist:         pgTextToString(next.Artist),
-		Thumbnail:      pgTextToString(next.ThumbnailUrl),
+		Artist:         nullStringToString(next.Artist),
+		Thumbnail:      nullStringToString(next.ThumbnailUrl),
 		StartedAt:      now,
 		DurationSec:    int(next.DurationSec),
 		RequestedBy:    next.RequestedBy,
 		RequesterName:  requesterName,
-		RequesterAvatar: pgTextToString(next.RequesterAvatar),
+		RequesterAvatar: nullStringToString(next.RequesterAvatar),
 	}
-	s.redis.SetPlaybackState(ctx, state)
+	s.state = state
 
 	s.wsbroadcast(model.WSMessage{
 		Type: "TRACK_CHANGE",
@@ -176,13 +178,14 @@ func (s *PlaybackService) SkipCurrent(ctx context.Context, reason string) {
 		Status: "played",
 	})
 	s.queries.InsertHistory(ctx, store.InsertHistoryParams{
+		ID:          uuid.New().String(),
 		VideoID:     current.VideoID,
 		Title:       current.Title,
 		Artist:      current.Artist,
 		DurationSec: current.DurationSec,
 		RequestedBy: current.RequestedBy,
-		PlayedAt:    pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		Skipped:     true,
+		PlayedAt:    time.Now().UTC().Format(time.RFC3339),
+		Skipped:     1,
 	})
 	s.queries.DeleteSkipVotesForTrack(ctx, current.ID)
 
@@ -199,7 +202,7 @@ func (s *PlaybackService) SkipCurrent(ctx context.Context, reason string) {
 
 	s.wsbroadcast(model.WSMessage{
 		Type: "TRACK_SKIPPED",
-		Data: map[string]string{"queue_id": current.ID.String(), "reason": reason},
+		Data: map[string]string{"queue_id": current.ID, "reason": reason},
 	})
 
 	// Tell broadcaster to stop current track
@@ -228,8 +231,10 @@ func (s *PlaybackService) StartSyncTicker(ctx context.Context, getListenerCount 
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				state, err := s.redis.GetPlaybackState(ctx)
-				if err != nil || state == nil {
+				s.mu.Lock()
+				state := s.state
+				s.mu.Unlock()
+				if state == nil {
 					continue
 				}
 				elapsed := time.Since(state.StartedAt).Seconds()
@@ -246,7 +251,7 @@ func (s *PlaybackService) StartSyncTicker(ctx context.Context, getListenerCount 
 	}()
 }
 
-func pgTextToString(t pgtype.Text) string {
+func nullStringToString(t sql.NullString) string {
 	if t.Valid {
 		return t.String
 	}

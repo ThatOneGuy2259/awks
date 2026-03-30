@@ -47,25 +47,6 @@ check_cmd yt-dlp
 
 log "All prerequisites found."
 
-# ── Start containers ──────────────────────────────────────────────────
-
-log "Starting PostgreSQL and Redis containers..."
-docker compose up -d
-
-# Wait for postgres to be ready
-log "Waiting for PostgreSQL..."
-for i in $(seq 1 30); do
-  if docker compose exec -T postgres pg_isready -U awks &>/dev/null; then
-    break
-  fi
-  if [ "$i" -eq 30 ]; then
-    err "PostgreSQL did not become ready in time."
-    exit 1
-  fi
-  sleep 1
-done
-log "PostgreSQL is ready."
-
 # ── Build frontend ────────────────────────────────────────────────────
 
 FRONTEND_DIR="$SCRIPT_DIR/frontend"

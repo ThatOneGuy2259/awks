@@ -5,63 +5,63 @@
 package store
 
 import (
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
 type AdminSetting struct {
-	Key       string             `json:"key"`
-	Value     string             `json:"value"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type PlayHistory struct {
-	ID          pgtype.UUID        `json:"id"`
-	VideoID     string             `json:"video_id"`
-	Title       string             `json:"title"`
-	Artist      pgtype.Text        `json:"artist"`
-	DurationSec int32              `json:"duration_sec"`
-	RequestedBy string             `json:"requested_by"`
-	PlayedAt    pgtype.Timestamptz `json:"played_at"`
-	Skipped     bool               `json:"skipped"`
+	ID          string         `json:"id"`
+	VideoID     string         `json:"video_id"`
+	Title       string         `json:"title"`
+	Artist      sql.NullString `json:"artist"`
+	DurationSec int64          `json:"duration_sec"`
+	RequestedBy string         `json:"requested_by"`
+	PlayedAt    string         `json:"played_at"`
+	Skipped     int64          `json:"skipped"`
 }
 
 type Queue struct {
-	ID           pgtype.UUID        `json:"id"`
-	YoutubeUrl   string             `json:"youtube_url"`
-	VideoID      string             `json:"video_id"`
-	Title        string             `json:"title"`
-	Artist       pgtype.Text        `json:"artist"`
-	DurationSec  int32              `json:"duration_sec"`
-	ThumbnailUrl pgtype.Text        `json:"thumbnail_url"`
-	RequestedBy  string             `json:"requested_by"`
-	Position     int32              `json:"position"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	AudioStatus  string             `json:"audio_status"`
-	AudioPath    pgtype.Text        `json:"audio_path"`
+	ID           string         `json:"id"`
+	YoutubeUrl   string         `json:"youtube_url"`
+	VideoID      string         `json:"video_id"`
+	Title        string         `json:"title"`
+	Artist       sql.NullString `json:"artist"`
+	DurationSec  int64          `json:"duration_sec"`
+	ThumbnailUrl sql.NullString `json:"thumbnail_url"`
+	RequestedBy  string         `json:"requested_by"`
+	Position     int64          `json:"position"`
+	Status       string         `json:"status"`
+	CreatedAt    string         `json:"created_at"`
+	AudioStatus  string         `json:"audio_status"`
+	AudioPath    sql.NullString `json:"audio_path"`
 }
 
 type SkipVote struct {
-	ID        pgtype.UUID        `json:"id"`
-	QueueID   pgtype.UUID        `json:"queue_id"`
-	UserID    string             `json:"user_id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID        string `json:"id"`
+	QueueID   string `json:"queue_id"`
+	UserID    string `json:"user_id"`
+	CreatedAt string `json:"created_at"`
 }
 
 type User struct {
-	ID        string             `json:"id"`
-	Username  string             `json:"username"`
-	AvatarUrl pgtype.Text        `json:"avatar_url"`
-	Role      string             `json:"role"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID        string         `json:"id"`
+	Username  string         `json:"username"`
+	AvatarUrl sql.NullString `json:"avatar_url"`
+	Role      string         `json:"role"`
+	CreatedAt string         `json:"created_at"`
+	UpdatedAt string         `json:"updated_at"`
 }
 
 type UserTimeout struct {
-	ID        pgtype.UUID        `json:"id"`
-	UserID    string             `json:"user_id"`
-	IssuedBy  string             `json:"issued_by"`
-	Reason    pgtype.Text        `json:"reason"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
+	IssuedBy  string         `json:"issued_by"`
+	Reason    sql.NullString `json:"reason"`
+	ExpiresAt string         `json:"expires_at"`
+	CreatedAt string         `json:"created_at"`
 }

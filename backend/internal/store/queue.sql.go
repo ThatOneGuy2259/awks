@@ -7,8 +7,7 @@ package store
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
+	"database/sql"
 )
 
 const countPendingAutoDJ = `-- name: CountPendingAutoDJ :one
@@ -16,18 +15,18 @@ SELECT COUNT(*) FROM queue WHERE requested_by = 'auto-dj' AND status IN ('pendin
 `
 
 func (q *Queries) CountPendingAutoDJ(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countPendingAutoDJ)
+	row := q.db.QueryRowContext(ctx, countPendingAutoDJ)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
 const countUserPendingTracks = `-- name: CountUserPendingTracks :one
-SELECT COUNT(*) FROM queue WHERE requested_by = $1 AND status IN ('pending', 'playing')
+SELECT COUNT(*) FROM queue WHERE requested_by = ? AND status IN ('pending', 'playing')
 `
 
 func (q *Queries) CountUserPendingTracks(ctx context.Context, requestedBy string) (int64, error) {
-	row := q.db.QueryRow(ctx, countUserPendingTracks, requestedBy)
+	row := q.db.QueryRowContext(ctx, countUserPendingTracks, requestedBy)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -38,16 +37,16 @@ DELETE FROM queue WHERE requested_by = 'auto-dj' AND status = 'pending'
 `
 
 func (q *Queries) DeletePendingAutoDJ(ctx context.Context) error {
-	_, err := q.db.Exec(ctx, deletePendingAutoDJ)
+	_, err := q.db.ExecContext(ctx, deletePendingAutoDJ)
 	return err
 }
 
 const deleteQueueItem = `-- name: DeleteQueueItem :exec
-DELETE FROM queue WHERE queue.id = $1
+DELETE FROM queue WHERE queue.id = ?
 `
 
-func (q *Queries) DeleteQueueItem(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deleteQueueItem, id)
+func (q *Queries) DeleteQueueItem(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteQueueItem, id)
 	return err
 }
 
@@ -55,19 +54,22 @@ const getActiveQueueIDs = `-- name: GetActiveQueueIDs :many
 SELECT id FROM queue WHERE status IN ('pending', 'playing')
 `
 
-func (q *Queries) GetActiveQueueIDs(ctx context.Context) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, getActiveQueueIDs)
+func (q *Queries) GetActiveQueueIDs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getActiveQueueIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []pgtype.UUID
+	var items []string
 	for rows.Next() {
-		var id pgtype.UUID
+		var id string
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -87,25 +89,25 @@ LIMIT 1
 `
 
 type GetCurrentlyPlayingRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	YoutubeUrl      string             `json:"youtube_url"`
-	VideoID         string             `json:"video_id"`
-	Title           string             `json:"title"`
-	Artist          pgtype.Text        `json:"artist"`
-	DurationSec     int32              `json:"duration_sec"`
-	ThumbnailUrl    pgtype.Text        `json:"thumbnail_url"`
-	RequestedBy     string             `json:"requested_by"`
-	Position        int32              `json:"position"`
-	Status          string             `json:"status"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	AudioStatus     string             `json:"audio_status"`
-	AudioPath       pgtype.Text        `json:"audio_path"`
-	RequesterName   string             `json:"requester_name"`
-	RequesterAvatar pgtype.Text        `json:"requester_avatar"`
+	ID              string         `json:"id"`
+	YoutubeUrl      string         `json:"youtube_url"`
+	VideoID         string         `json:"video_id"`
+	Title           string         `json:"title"`
+	Artist          sql.NullString `json:"artist"`
+	DurationSec     int64          `json:"duration_sec"`
+	ThumbnailUrl    sql.NullString `json:"thumbnail_url"`
+	RequestedBy     string         `json:"requested_by"`
+	Position        int64          `json:"position"`
+	Status          string         `json:"status"`
+	CreatedAt       string         `json:"created_at"`
+	AudioStatus     string         `json:"audio_status"`
+	AudioPath       sql.NullString `json:"audio_path"`
+	RequesterName   string         `json:"requester_name"`
+	RequesterAvatar sql.NullString `json:"requester_avatar"`
 }
 
 func (q *Queries) GetCurrentlyPlaying(ctx context.Context) (GetCurrentlyPlayingRow, error) {
-	row := q.db.QueryRow(ctx, getCurrentlyPlaying)
+	row := q.db.QueryRowContext(ctx, getCurrentlyPlaying)
 	var i GetCurrentlyPlayingRow
 	err := row.Scan(
 		&i.ID,
@@ -137,21 +139,21 @@ LIMIT 1
 `
 
 type GetNextPendingRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	YoutubeUrl   string             `json:"youtube_url"`
-	VideoID      string             `json:"video_id"`
-	Title        string             `json:"title"`
-	Artist       pgtype.Text        `json:"artist"`
-	DurationSec  int32              `json:"duration_sec"`
-	ThumbnailUrl pgtype.Text        `json:"thumbnail_url"`
-	RequestedBy  string             `json:"requested_by"`
-	Position     int32              `json:"position"`
-	Status       string             `json:"status"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID           string         `json:"id"`
+	YoutubeUrl   string         `json:"youtube_url"`
+	VideoID      string         `json:"video_id"`
+	Title        string         `json:"title"`
+	Artist       sql.NullString `json:"artist"`
+	DurationSec  int64          `json:"duration_sec"`
+	ThumbnailUrl sql.NullString `json:"thumbnail_url"`
+	RequestedBy  string         `json:"requested_by"`
+	Position     int64          `json:"position"`
+	Status       string         `json:"status"`
+	CreatedAt    string         `json:"created_at"`
 }
 
 func (q *Queries) GetNextPending(ctx context.Context) (GetNextPendingRow, error) {
-	row := q.db.QueryRow(ctx, getNextPending)
+	row := q.db.QueryRowContext(ctx, getNextPending)
 	var i GetNextPendingRow
 	err := row.Scan(
 		&i.ID,
@@ -178,13 +180,13 @@ LIMIT 1
 `
 
 type GetNextPendingExtractionRow struct {
-	ID         pgtype.UUID `json:"id"`
-	YoutubeUrl string      `json:"youtube_url"`
-	VideoID    string      `json:"video_id"`
+	ID         string `json:"id"`
+	YoutubeUrl string `json:"youtube_url"`
+	VideoID    string `json:"video_id"`
 }
 
 func (q *Queries) GetNextPendingExtraction(ctx context.Context) (GetNextPendingExtractionRow, error) {
-	row := q.db.QueryRow(ctx, getNextPendingExtraction)
+	row := q.db.QueryRowContext(ctx, getNextPendingExtraction)
 	var i GetNextPendingExtractionRow
 	err := row.Scan(&i.ID, &i.YoutubeUrl, &i.VideoID)
 	return i, err
@@ -203,25 +205,25 @@ LIMIT 1
 `
 
 type GetNextReadyPendingRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	YoutubeUrl      string             `json:"youtube_url"`
-	VideoID         string             `json:"video_id"`
-	Title           string             `json:"title"`
-	Artist          pgtype.Text        `json:"artist"`
-	DurationSec     int32              `json:"duration_sec"`
-	ThumbnailUrl    pgtype.Text        `json:"thumbnail_url"`
-	RequestedBy     string             `json:"requested_by"`
-	Position        int32              `json:"position"`
-	Status          string             `json:"status"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	AudioStatus     string             `json:"audio_status"`
-	AudioPath       pgtype.Text        `json:"audio_path"`
-	RequesterName   string             `json:"requester_name"`
-	RequesterAvatar pgtype.Text        `json:"requester_avatar"`
+	ID              string         `json:"id"`
+	YoutubeUrl      string         `json:"youtube_url"`
+	VideoID         string         `json:"video_id"`
+	Title           string         `json:"title"`
+	Artist          sql.NullString `json:"artist"`
+	DurationSec     int64          `json:"duration_sec"`
+	ThumbnailUrl    sql.NullString `json:"thumbnail_url"`
+	RequestedBy     string         `json:"requested_by"`
+	Position        int64          `json:"position"`
+	Status          string         `json:"status"`
+	CreatedAt       string         `json:"created_at"`
+	AudioStatus     string         `json:"audio_status"`
+	AudioPath       sql.NullString `json:"audio_path"`
+	RequesterName   string         `json:"requester_name"`
+	RequesterAvatar sql.NullString `json:"requester_avatar"`
 }
 
 func (q *Queries) GetNextReadyPending(ctx context.Context) (GetNextReadyPendingRow, error) {
-	row := q.db.QueryRow(ctx, getNextReadyPending)
+	row := q.db.QueryRowContext(ctx, getNextReadyPending)
 	var i GetNextReadyPendingRow
 	err := row.Scan(
 		&i.ID,
@@ -251,13 +253,13 @@ ORDER BY position ASC
 `
 
 type GetPendingExtractionsRow struct {
-	ID         pgtype.UUID `json:"id"`
-	YoutubeUrl string      `json:"youtube_url"`
-	VideoID    string      `json:"video_id"`
+	ID         string `json:"id"`
+	YoutubeUrl string `json:"youtube_url"`
+	VideoID    string `json:"video_id"`
 }
 
 func (q *Queries) GetPendingExtractions(ctx context.Context) ([]GetPendingExtractionsRow, error) {
-	rows, err := q.db.Query(ctx, getPendingExtractions)
+	rows, err := q.db.QueryContext(ctx, getPendingExtractions)
 	if err != nil {
 		return nil, err
 	}
@@ -269,6 +271,9 @@ func (q *Queries) GetPendingExtractions(ctx context.Context) ([]GetPendingExtrac
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -288,25 +293,25 @@ ORDER BY q.position ASC
 `
 
 type GetQueueRow struct {
-	ID              pgtype.UUID        `json:"id"`
-	YoutubeUrl      string             `json:"youtube_url"`
-	VideoID         string             `json:"video_id"`
-	Title           string             `json:"title"`
-	Artist          pgtype.Text        `json:"artist"`
-	DurationSec     int32              `json:"duration_sec"`
-	ThumbnailUrl    pgtype.Text        `json:"thumbnail_url"`
-	RequestedBy     string             `json:"requested_by"`
-	Position        int32              `json:"position"`
-	Status          string             `json:"status"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	AudioStatus     string             `json:"audio_status"`
-	AudioPath       pgtype.Text        `json:"audio_path"`
-	RequesterName   string             `json:"requester_name"`
-	RequesterAvatar pgtype.Text        `json:"requester_avatar"`
+	ID              string         `json:"id"`
+	YoutubeUrl      string         `json:"youtube_url"`
+	VideoID         string         `json:"video_id"`
+	Title           string         `json:"title"`
+	Artist          sql.NullString `json:"artist"`
+	DurationSec     int64          `json:"duration_sec"`
+	ThumbnailUrl    sql.NullString `json:"thumbnail_url"`
+	RequestedBy     string         `json:"requested_by"`
+	Position        int64          `json:"position"`
+	Status          string         `json:"status"`
+	CreatedAt       string         `json:"created_at"`
+	AudioStatus     string         `json:"audio_status"`
+	AudioPath       sql.NullString `json:"audio_path"`
+	RequesterName   string         `json:"requester_name"`
+	RequesterAvatar sql.NullString `json:"requester_avatar"`
 }
 
 func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
-	rows, err := q.db.Query(ctx, getQueue)
+	rows, err := q.db.QueryContext(ctx, getQueue)
 	if err != nil {
 		return nil, err
 	}
@@ -335,6 +340,9 @@ func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
 		}
 		items = append(items, i)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -344,11 +352,11 @@ func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
 const getQueueItem = `-- name: GetQueueItem :one
 SELECT id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url,
        requested_by, position, status, created_at, audio_status, audio_path
-FROM queue WHERE id = $1
+FROM queue WHERE id = ?
 `
 
-func (q *Queries) GetQueueItem(ctx context.Context, id pgtype.UUID) (Queue, error) {
-	row := q.db.QueryRow(ctx, getQueueItem, id)
+func (q *Queries) GetQueueItem(ctx context.Context, id string) (Queue, error) {
+	row := q.db.QueryRowContext(ctx, getQueueItem, id)
 	var i Queue
 	err := row.Scan(
 		&i.ID,
@@ -369,24 +377,26 @@ func (q *Queries) GetQueueItem(ctx context.Context, id pgtype.UUID) (Queue, erro
 }
 
 const insertQueueItem = `-- name: InsertQueueItem :one
-INSERT INTO queue (youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status)
-VALUES ($1, $2, $3, $4, $5, $6, $7, nextval('queue_position_seq'), $8)
+INSERT INTO queue (id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM queue), ?)
 RETURNING id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, status, created_at, audio_status, audio_path
 `
 
 type InsertQueueItemParams struct {
-	YoutubeUrl   string      `json:"youtube_url"`
-	VideoID      string      `json:"video_id"`
-	Title        string      `json:"title"`
-	Artist       pgtype.Text `json:"artist"`
-	DurationSec  int32       `json:"duration_sec"`
-	ThumbnailUrl pgtype.Text `json:"thumbnail_url"`
-	RequestedBy  string      `json:"requested_by"`
-	AudioStatus  string      `json:"audio_status"`
+	ID           string         `json:"id"`
+	YoutubeUrl   string         `json:"youtube_url"`
+	VideoID      string         `json:"video_id"`
+	Title        string         `json:"title"`
+	Artist       sql.NullString `json:"artist"`
+	DurationSec  int64          `json:"duration_sec"`
+	ThumbnailUrl sql.NullString `json:"thumbnail_url"`
+	RequestedBy  string         `json:"requested_by"`
+	AudioStatus  string         `json:"audio_status"`
 }
 
 func (q *Queries) InsertQueueItem(ctx context.Context, arg InsertQueueItemParams) (Queue, error) {
-	row := q.db.QueryRow(ctx, insertQueueItem,
+	row := q.db.QueryRowContext(ctx, insertQueueItem,
+		arg.ID,
 		arg.YoutubeUrl,
 		arg.VideoID,
 		arg.Title,
@@ -416,65 +426,65 @@ func (q *Queries) InsertQueueItem(ctx context.Context, arg InsertQueueItemParams
 }
 
 const isVideoInQueue = `-- name: IsVideoInQueue :one
-SELECT EXISTS(SELECT 1 FROM queue WHERE video_id = $1 AND status IN ('pending', 'playing'))
+SELECT EXISTS(SELECT 1 FROM queue WHERE video_id = ? AND status IN ('pending', 'playing'))
 `
 
-func (q *Queries) IsVideoInQueue(ctx context.Context, videoID string) (bool, error) {
-	row := q.db.QueryRow(ctx, isVideoInQueue, videoID)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
+func (q *Queries) IsVideoInQueue(ctx context.Context, videoID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, isVideoInQueue, videoID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const moveToTop = `-- name: MoveToTop :exec
-UPDATE queue SET position = (SELECT MIN(position) - 1 FROM queue WHERE queue.status = 'pending')
-WHERE queue.id = $1
+UPDATE queue SET position = (SELECT MIN(position) - 1 FROM queue WHERE status = 'pending')
+WHERE queue.id = ?
 `
 
-func (q *Queries) MoveToTop(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, moveToTop, id)
+func (q *Queries) MoveToTop(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, moveToTop, id)
 	return err
 }
 
 const updateAudioStatus = `-- name: UpdateAudioStatus :exec
-UPDATE queue SET audio_status = $2, audio_path = $3 WHERE queue.id = $1
+UPDATE queue SET audio_status = ?, audio_path = ? WHERE id = ?
 `
 
 type UpdateAudioStatusParams struct {
-	ID          pgtype.UUID `json:"id"`
-	AudioStatus string      `json:"audio_status"`
-	AudioPath   pgtype.Text `json:"audio_path"`
+	AudioStatus string         `json:"audio_status"`
+	AudioPath   sql.NullString `json:"audio_path"`
+	ID          string         `json:"id"`
 }
 
 func (q *Queries) UpdateAudioStatus(ctx context.Context, arg UpdateAudioStatusParams) error {
-	_, err := q.db.Exec(ctx, updateAudioStatus, arg.ID, arg.AudioStatus, arg.AudioPath)
+	_, err := q.db.ExecContext(ctx, updateAudioStatus, arg.AudioStatus, arg.AudioPath, arg.ID)
 	return err
 }
 
 const updateDuration = `-- name: UpdateDuration :exec
-UPDATE queue SET duration_sec = $2 WHERE queue.id = $1
+UPDATE queue SET duration_sec = ? WHERE id = ?
 `
 
 type UpdateDurationParams struct {
-	ID          pgtype.UUID `json:"id"`
-	DurationSec int32       `json:"duration_sec"`
+	DurationSec int64  `json:"duration_sec"`
+	ID          string `json:"id"`
 }
 
 func (q *Queries) UpdateDuration(ctx context.Context, arg UpdateDurationParams) error {
-	_, err := q.db.Exec(ctx, updateDuration, arg.ID, arg.DurationSec)
+	_, err := q.db.ExecContext(ctx, updateDuration, arg.DurationSec, arg.ID)
 	return err
 }
 
 const updateQueueStatus = `-- name: UpdateQueueStatus :exec
-UPDATE queue SET status = $2 WHERE queue.id = $1
+UPDATE queue SET status = ? WHERE queue.id = ?
 `
 
 type UpdateQueueStatusParams struct {
-	ID     pgtype.UUID `json:"id"`
-	Status string      `json:"status"`
+	Status string `json:"status"`
+	ID     string `json:"id"`
 }
 
 func (q *Queries) UpdateQueueStatus(ctx context.Context, arg UpdateQueueStatusParams) error {
-	_, err := q.db.Exec(ctx, updateQueueStatus, arg.ID, arg.Status)
+	_, err := q.db.ExecContext(ctx, updateQueueStatus, arg.Status, arg.ID)
 	return err
 }

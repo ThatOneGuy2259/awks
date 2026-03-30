@@ -10,11 +10,11 @@ import (
 )
 
 const getAllSettings = `-- name: GetAllSettings :many
-SELECT key, value, updated_at FROM admin_settings
+SELECT "key", value, updated_at FROM admin_settings
 `
 
 func (q *Queries) GetAllSettings(ctx context.Context) ([]AdminSetting, error) {
-	rows, err := q.db.Query(ctx, getAllSettings)
+	rows, err := q.db.QueryContext(ctx, getAllSettings)
 	if err != nil {
 		return nil, err
 	}
@@ -27,6 +27,9 @@ func (q *Queries) GetAllSettings(ctx context.Context) ([]AdminSetting, error) {
 		}
 		items = append(items, i)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
@@ -34,19 +37,19 @@ func (q *Queries) GetAllSettings(ctx context.Context) ([]AdminSetting, error) {
 }
 
 const getSetting = `-- name: GetSetting :one
-SELECT value FROM admin_settings WHERE key = $1
+SELECT value FROM admin_settings WHERE key = ?
 `
 
 func (q *Queries) GetSetting(ctx context.Context, key string) (string, error) {
-	row := q.db.QueryRow(ctx, getSetting, key)
+	row := q.db.QueryRowContext(ctx, getSetting, key)
 	var value string
 	err := row.Scan(&value)
 	return value, err
 }
 
 const upsertSetting = `-- name: UpsertSetting :exec
-INSERT INTO admin_settings (key, value, updated_at) VALUES ($1, $2, now())
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
+INSERT INTO admin_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = datetime('now')
 `
 
 type UpsertSettingParams struct {
@@ -55,6 +58,6 @@ type UpsertSettingParams struct {
 }
 
 func (q *Queries) UpsertSetting(ctx context.Context, arg UpsertSettingParams) error {
-	_, err := q.db.Exec(ctx, upsertSetting, arg.Key, arg.Value)
+	_, err := q.db.ExecContext(ctx, upsertSetting, arg.Key, arg.Value)
 	return err
 }

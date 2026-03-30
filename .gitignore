@@ -11,6 +11,11 @@ backend/server
 .env.*
 !.env.example
 
+# Database
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
 # Audio cache
 backend/audio-cache/
 backend/auto-dj-cache/

@@ -24,8 +24,8 @@ func (h *HistoryHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := h.queries.GetHistory(r.Context(), store.GetHistoryParams{
-		Limit:  int32(limit),
-		Offset: int32(offset),
+		Limit:  int64(limit),
+		Offset: int64(offset),
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
