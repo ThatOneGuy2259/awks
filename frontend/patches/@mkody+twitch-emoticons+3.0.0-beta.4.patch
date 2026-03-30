@@ -1,0 +1,13 @@
+diff --git a/node_modules/@mkody/twitch-emoticons/src/struct/Emote.js b/node_modules/@mkody/twitch-emoticons/src/struct/Emote.js
+index 68d2e83..2329719 100644
+--- a/node_modules/@mkody/twitch-emoticons/src/struct/Emote.js
++++ b/node_modules/@mkody/twitch-emoticons/src/struct/Emote.js
+@@ -8,7 +8,7 @@ class Emote {
+    * @throws {Error} When trying to use the base Emote class directly.
+    */
+   constructor (channel, id, data) {
+-    if (new.target.name === Emote.name) {
++    if (new.target === Emote) {
+       throw new Error('Base Emote class cannot be used')
+     }
+ 

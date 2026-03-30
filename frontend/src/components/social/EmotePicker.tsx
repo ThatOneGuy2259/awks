@@ -48,11 +48,27 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
         ];
 
         // Fetch global emotes from each platform (undefined for global emotes)
-        await Promise.all([
-          fetcher.fetchBTTVEmotes(undefined),
-          fetcher.fetchFFZEmotes(undefined),
-          fetcher.fetchSevenTVEmotes(undefined, { format: 'webp' })
+        // Wrap each fetch in try-catch to prevent one failure from breaking everything
+        const results = await Promise.allSettled([
+          fetcher.fetchBTTVEmotes(undefined).catch(e => {
+            console.warn('BTTV global fetch failed:', e);
+            return null;
+          }),
+          fetcher.fetchFFZEmotes(undefined).catch(e => {
+            console.warn('FFZ global fetch failed:', e);
+            return null;
+          }),
+          fetcher.fetchSevenTVEmotes(undefined, { format: 'webp' }).catch(e => {
+            console.warn('7TV global fetch failed:', e);
+            return null;
+          })
         ]);
+
+        // Check if any succeeded
+        const anySuccess = results.some(r => r.status === 'fulfilled' && r.value !== null);
+        if (!anySuccess) {
+          throw new Error('All emote providers failed to load');
+        }
 
         // Fetch emotes from popular channels for more variety
         const channelPromises = popularChannelIds.map(channelId =>
@@ -64,17 +80,29 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
         );
         
         await Promise.all(channelPromises);
+        
+        console.log(`Finished fetching. Total emotes in fetcher: ${fetcher.emotes.size}`);
+        if (fetcher.emotes.size === 0) {
+          console.warn('No emotes were fetched. This might indicate a network or API issue.');
+          throw new Error('No emotes were successfully fetched');
+        }
 
         // Convert to our Emote format
         const allEmotes: Emote[] = [];
+        const seenEmotes = new Set<string>(); // Track unique emote IDs
+        
         fetcher.emotes.forEach((emote) => {
-          allEmotes.push({
-            id: emote.id,
-            code: emote.code,
-            link: emote.toLink(),
-            animated: (emote as unknown as { animated?: boolean }).animated || false,
-            provider: emote.type as 'twitch' | 'bttv' | 'ffz' | '7tv'
-          });
+          const uniqueKey = `${emote.type}-${emote.id}`;
+          if (!seenEmotes.has(uniqueKey)) {
+            seenEmotes.add(uniqueKey);
+            allEmotes.push({
+              id: emote.id,
+              code: emote.code,
+              link: emote.toLink(),
+              animated: (emote as unknown as { animated?: boolean }).animated || false,
+              provider: emote.type as 'twitch' | 'bttv' | 'ffz' | '7tv'
+            });
+          }
         });
 
         setEmotes(allEmotes);
@@ -86,6 +114,86 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
         });
       } catch (error) {
         console.error('Failed to load emotes:', error);
+        console.error('Error type:', error?.constructor?.name);
+        console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
+        console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
+        
+        // Provide a basic set of emotes as fallback
+        const basicEmotes: Emote[] = [
+          {
+            id: 'pepega',
+            code: 'Pepega',
+            link: 'https://cdn.betterttv.net/emote/5849c9a4f52fbdd5ac2e4c2c/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'pog',
+            code: 'Pog',
+            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef2d/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'kekw',
+            code: 'KEKW',
+            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef36/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'sadge',
+            code: 'Sadge',
+            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef31/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'monkas',
+            code: 'MonkaS',
+            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef32/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'lulw',
+            code: 'LULW',
+            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef37/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'omegalul',
+            code: 'OMEGALUL',
+            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef38/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'pepelaugh',
+            code: 'PepeLaugh',
+            link: 'https://cdn.betterttv.net/emote/566ca92365dbbdab32ec053a/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'pepehands',
+            code: 'PepeHands',
+            link: 'https://cdn.betterttv.net/emote/5e76233d1344a4562ec642de/3x',
+            animated: false,
+            provider: 'bttv'
+          },
+          {
+            id: 'kappa',
+            code: 'Kappa',
+            link: 'https://static-cdn.jtvnw.net/emoticons/v1/25/3.0',
+            animated: false,
+            provider: 'twitch'
+          }
+        ];
+        
+        console.log('Using basic fallback emotes:', basicEmotes.length);
+        setEmotes(basicEmotes);
       } finally {
         setLoading(false);
       }
@@ -148,7 +256,7 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
           <div className="grid grid-cols-6 gap-2">
             {filteredEmotes.map((emote) => (
               <button
-                key={`${emote.provider}-${emote.id}`}
+                key={`${emote.provider}-${emote.id}-${emote.code}`}
                 onClick={() => handleEmoteClick(emote)}
                 className="aspect-square bg-surface-container rounded hover:bg-surface-container-highest transition-colors p-1 flex items-center justify-center group relative"
                 title={emote.code}
