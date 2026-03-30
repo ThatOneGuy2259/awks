@@ -26,7 +26,6 @@ import (
 	"github.com/mccann/awks3/backend/internal/config"
 	"github.com/mccann/awks3/backend/internal/handler"
 	"github.com/mccann/awks3/backend/internal/model"
-	redisclient "github.com/mccann/awks3/backend/internal/redis"
 	"github.com/mccann/awks3/backend/internal/service"
 	"github.com/mccann/awks3/backend/internal/store"
 	"github.com/mccann/awks3/backend/internal/ws"
@@ -80,13 +79,6 @@ func main() {
 		log.Printf("timeout cleanup warning: %v", err)
 	}
 
-	// Redis
-	rdb, err := redisclient.New(cfg.RedisURL)
-	if err != nil {
-		log.Fatalf("failed to connect to redis: %v", err)
-	}
-	defer rdb.Close()
-
 	queries := store.New(pool)
 
 	// Audio Broadcaster (WebRTC)
@@ -115,7 +107,7 @@ func main() {
 	})
 
 	// Playback Service
-	playbackSvc := service.NewPlaybackService(queries, rdb, func(msg model.WSMessage) {
+	playbackSvc := service.NewPlaybackService(queries, func(msg model.WSMessage) {
 		hub.Broadcast(msg)
 	}, broadcaster)
 

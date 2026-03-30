@@ -11,13 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/mccann/awks3/backend/internal/audio"
 	"github.com/mccann/awks3/backend/internal/model"
-	redisclient "github.com/mccann/awks3/backend/internal/redis"
 	"github.com/mccann/awks3/backend/internal/store"
 )
 
 type PlaybackService struct {
 	queries      store.Querier
-	redis        *redisclient.Client
+	state        *model.PlaybackState // in-memory playback state (replaces Redis)
 	wsbroadcast  func(msg model.WSMessage)
 	broadcaster  *audio.Broadcaster
 	preloadNext  func(ctx context.Context)
@@ -26,10 +25,9 @@ type PlaybackService struct {
 	mu           sync.Mutex
 }
 
-func NewPlaybackService(q store.Querier, r *redisclient.Client, wsbroadcast func(model.WSMessage), broadcaster *audio.Broadcaster) *PlaybackService {
+func NewPlaybackService(q store.Querier, wsbroadcast func(model.WSMessage), broadcaster *audio.Broadcaster) *PlaybackService {
 	s := &PlaybackService{
 		queries:     q,
-		redis:       r,
 		wsbroadcast: wsbroadcast,
 		broadcaster: broadcaster,
 		cleanupCh:   make(chan string, 64),
@@ -56,7 +54,9 @@ func (s *PlaybackService) SetAutoDJQueue(fn func(ctx context.Context) bool) {
 }
 
 func (s *PlaybackService) GetCurrentState(ctx context.Context) (*model.PlaybackState, error) {
-	return s.redis.GetPlaybackState(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.state, nil
 }
 
 // AdvanceQueue marks the current track as played and starts the next ready track.
@@ -102,7 +102,7 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 		}
 		if err != nil {
 			log.Println("No more tracks in queue, entering idle state")
-			s.redis.ClearPlaybackState(ctx)
+			s.state = nil
 			s.wsbroadcast(model.WSMessage{
 				Type: "TRACK_CHANGE",
 				Data: model.TrackChangeData{VideoID: ""},
@@ -136,7 +136,7 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 		RequesterName:  requesterName,
 		RequesterAvatar: pgTextToString(next.RequesterAvatar),
 	}
-	s.redis.SetPlaybackState(ctx, state)
+	s.state = state
 
 	s.wsbroadcast(model.WSMessage{
 		Type: "TRACK_CHANGE",
@@ -228,8 +228,10 @@ func (s *PlaybackService) StartSyncTicker(ctx context.Context, getListenerCount 
 				ticker.Stop()
 				return
 			case <-ticker.C:
-				state, err := s.redis.GetPlaybackState(ctx)
-				if err != nil || state == nil {
+				s.mu.Lock()
+				state := s.state
+				s.mu.Unlock()
+				if state == nil {
 					continue
 				}
 				elapsed := time.Since(state.StartedAt).Seconds()

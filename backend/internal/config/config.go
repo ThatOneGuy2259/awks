@@ -11,7 +11,6 @@ import (
 type Config struct {
 	Port           string
 	DatabaseURL    string
-	RedisURL       string
 	ClerkSecretKey string
 	YouTubeAPIKey  string
 	CORSOrigin     string
@@ -29,7 +28,6 @@ func Load() *Config {
 	return &Config{
 		Port:           getEnv("PORT", "8080"),
 		DatabaseURL:    getEnv("DATABASE_URL", "postgres://awks:awks@localhost:5432/awks?sslmode=disable"),
-		RedisURL:       getEnv("REDIS_URL", "redis://localhost:6379"),
 		ClerkSecretKey: getEnv("CLERK_SECRET_KEY", ""),
 		YouTubeAPIKey:  getEnv("YOUTUBE_API_KEY", ""),
 		CORSOrigin:     getEnv("CORS_ORIGIN", "http://localhost:5173"),
