@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
 import { useVisualizerStore, type VisualizerOrientation } from '../stores/visualizerStore';
+import { useUIStore } from '../stores/uiStore';
 import { BeatDetector } from '../lib/beatDetector';
 import { barHeights, barColors } from '../hooks/useVisualizer';
 
@@ -132,7 +133,8 @@ function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _fre
   const vizBottom = isXl ? -4 : -22;
   const vizBaseline = h + vizBottom - vizHeight + 180;
   const vizMaxBarHeight = 180 - 24;
-  const contentLeft = w > 1024 ? 256 : 0;
+  const sidebarOpen = w > 1024 && !useUIStore.getState().sidebarCollapsed;
+  const contentLeft = sidebarOpen ? 256 : 0;
   const contentW = w - contentLeft;
   const contentCenter = contentLeft + contentW / 2;
 

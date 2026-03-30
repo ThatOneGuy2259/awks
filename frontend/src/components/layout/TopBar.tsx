@@ -19,14 +19,14 @@ export function TopBar() {
           <AwksLogo className="h-7 w-auto" />
         </div>
         <button
-  onClick={toggleSidebar}
-  className="hidden lg:flex items-center text-on-surface-variant hover:text-primary transition-colors mr-2"
-  aria-label={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
->
-  <span className="material-symbols-outlined">
-    {sidebarCollapsed ? 'menu' : 'menu_open'}
-  </span>
-</button>
+          onClick={toggleSidebar}
+          className="hidden lg:flex items-center text-on-surface-variant hover:text-primary transition-colors mr-2"
+          aria-label={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
+        >
+          <span className="material-symbols-outlined">
+            {sidebarCollapsed ? 'menu' : 'menu_open'}
+          </span>
+        </button>
 
         {!onSearchPage && (
           <div className="flex-1 flex justify-center">
