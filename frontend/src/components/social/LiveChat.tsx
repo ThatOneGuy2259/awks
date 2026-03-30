@@ -125,38 +125,38 @@ export function LiveChat({ onSend }: LiveChatProps) {
         )}
         <div className="relative">
           <input
-            className="w-full bg-surface-container-low border-none rounded-full py-3 pl-4 pr-24 text-sm focus:ring-1 focus:ring-primary/50 outline-none text-on-surface placeholder:text-on-surface-variant"
+            className="w-full bg-surface-container-low border-none rounded-full py-3 pl-4 pr-32 text-sm focus:ring-1 focus:ring-primary/50 outline-none text-on-surface placeholder:text-on-surface-variant"
             placeholder="Say something..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           />
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
             <button
               onClick={() => {
                 setShowEmoji(false);
                 setShowEmotes(!showEmotes);
               }}
-              className="text-on-surface-variant p-1.5 hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
+              className="text-on-surface-variant p-1 hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
               title="Twitch Emotes"
             >
-              <span className="material-symbols-outlined text-xl">face</span>
+              <span className="material-symbols-outlined text-lg">face</span>
             </button>
             <button
               onClick={() => {
                 setShowEmotes(false);
                 setShowEmoji(!showEmoji);
               }}
-              className="text-on-surface-variant p-1.5 hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
+              className="text-on-surface-variant p-1 hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
               title="Emoji"
             >
-              <span className="material-symbols-outlined text-xl">mood</span>
+              <span className="material-symbols-outlined text-lg">mood</span>
             </button>
             <button
               onClick={handleSend}
-              className="text-primary p-1.5 hover:bg-primary/10 rounded-full transition-colors"
+              className="text-primary p-1 hover:bg-primary/10 rounded-full transition-colors"
             >
-              <span className="material-symbols-outlined">send</span>
+              <span className="material-symbols-outlined text-lg">send</span>
             </button>
           </div>
         </div>
