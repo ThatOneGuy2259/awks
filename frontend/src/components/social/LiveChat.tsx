@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import Picker from '@emoji-mart/react';
-import data from '@emoji-mart/data';
+import EmojiPicker, { Theme, type EmojiClickData } from 'emoji-picker-react';
 
 interface LiveChatProps {
   onSend: (text: string) => void;
@@ -28,11 +27,6 @@ export function LiveChat({ onSend }: LiveChatProps) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showEmoji]);
-
-  const handleEmojiSelect = (emoji: { native: string }) => {
-    setInput((prev) => prev + emoji.native);
-    setShowEmoji(false);
-  };
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -72,7 +66,14 @@ export function LiveChat({ onSend }: LiveChatProps) {
       <div className="p-4 bg-surface-container relative">
         {showEmoji && (
           <div ref={emojiRef} className="absolute bottom-full right-4 mb-2 z-50">
-            <Picker data={data} onEmojiSelect={handleEmojiSelect} theme="dark" previewPosition="none" skinTonePosition="none" />
+            <EmojiPicker
+              theme={Theme.DARK}
+              onEmojiClick={(emojiData: EmojiClickData) => { setInput((prev) => prev + emojiData.emoji); setShowEmoji(false); }}
+              height={300}
+              width={280}
+              previewConfig={{ showPreview: false }}
+              style={{ '--epr-emoji-size': '20px', '--epr-emoji-padding': '4px', '--epr-category-navigation-button-size': '18px' } as React.CSSProperties}
+            />
           </div>
         )}
         <div className="relative">
