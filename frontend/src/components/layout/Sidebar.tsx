@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
 import { useUserStore } from '../../stores/userStore';
+import { useUIStore } from '../../stores/uiStore';
 import { AwksLogo } from '../AwksLogo';
 import { HelpModal } from '../HelpModal';
 
@@ -20,12 +21,13 @@ interface SidebarProps {
 export function Sidebar({ listening }: SidebarProps) {
   const { signOut } = useClerk();
   const isAdmin = useUserStore((s) => s.role === 'admin');
+  const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const [showHelp, setShowHelp] = useState(false);
   const navItems = isAdmin ? [...baseNavItems, adminNavItem] : baseNavItems;
 
   return (
     <>
-    <aside className="fixed left-0 top-0 h-full w-64 border-r border-outline-variant/10 bg-surface-container-low hidden lg:flex flex-col py-8 z-40">
+    <aside className={`fixed left-0 top-0 h-full w-64 border-r border-outline-variant/10 bg-surface-container-low hidden lg:flex flex-col py-8 z-40 transition-transform duration-300 ease-in-out ${collapsed ? '-translate-x-full' : ''}`}>
       <div className="px-6 mb-10">
         <AwksLogo className="h-8 w-auto mb-1" />
         <p className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold font-label">

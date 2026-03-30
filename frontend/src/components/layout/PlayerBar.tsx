@@ -6,6 +6,7 @@ import { VolumeSlider } from '../player/VolumeSlider';
 import { VisualizerEQ } from '../player/VisualizerEQ';
 import { api } from '../../lib/api';
 import { useVisualizer } from '../../hooks/useVisualizer';
+import { useUIStore } from '../../stores/uiStore';
 
 interface PlayerBarProps {
   volume: number;
@@ -20,6 +21,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   const { elapsed, duration } = usePlaybackSync();
 
   const canvasRef = useVisualizer(analyserRef);
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const [showEQ, setShowEQ] = useState(false);
 
   if (!track) return null;
@@ -93,11 +95,11 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
         ref={canvasRef}
         width={1920}
         height={280}
-        className="hidden lg:block fixed left-64 right-0 w-[calc(100%-16rem)] pointer-events-none z-[51] h-[220px] -bottom-[22px] xl:h-[280px] xl:-bottom-[4px]"
+        className={`hidden lg:block fixed right-0 pointer-events-none z-[51] h-[220px] -bottom-[22px] xl:h-[280px] xl:-bottom-[4px] transition-[left,width] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0 w-full' : 'left-64 w-[calc(100%-16rem)]'}`}
       />
 
       {/* ── Compact layout: lg to xl ── */}
-      <footer className="hidden lg:flex xl:hidden fixed bottom-0 left-64 right-0 h-16 bg-surface/80 backdrop-blur-xl px-4 items-center gap-3 border-t border-white/5 z-50">
+      <footer className={`hidden lg:flex xl:hidden fixed bottom-0 right-0 h-16 bg-surface/80 backdrop-blur-xl px-4 items-center gap-3 border-t border-white/5 z-50 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}>
         <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
           <img className="w-full h-full object-cover" src={track.thumbnail} alt={track.title} />
         </div>
@@ -120,7 +122,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
       </footer>
 
       {/* ── Full layout: xl and up ── */}
-      <footer className="hidden xl:flex fixed bottom-0 left-64 right-0 h-24 bg-surface/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50">
+      <footer className={`hidden xl:flex fixed bottom-0 right-0 h-24 bg-surface/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}>
         <div className="flex items-center gap-4 w-1/3 flex-shrink-0">
           <div className="w-12 h-12 rounded-lg overflow-hidden">
             <img className="w-full h-full object-cover" src={track.thumbnail} alt={track.title} />

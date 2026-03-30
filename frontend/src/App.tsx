@@ -12,6 +12,7 @@ const SearchRequestView = lazy(() => import('./pages/SearchRequestView').then(m 
 const AdminDashboardView = lazy(() => import('./pages/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
 const HistoryView = lazy(() => import('./pages/HistoryView').then(m => ({ default: m.HistoryView })));
 import { useWebRTC } from './hooks/useWebRTC';
+import { useUIStore } from './stores/uiStore';
 import { setGetTokenFn, api } from './lib/api';
 import { useUserStore } from './stores/userStore';
 import { useThemeStore, applyTheme } from './stores/themeStore';
@@ -60,6 +61,7 @@ function AuthenticatedApp() {
 function AppContent() {
   useWebSocket();
   const { volume, setVolume, listening, analyserRef } = useWebRTC();
+  const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
 
   return (
     <>
@@ -68,7 +70,7 @@ function AppContent() {
       <Sidebar listening={listening} />
       <ConnectionBanner />
 
-      <main className="lg:pl-64 pt-20 pb-32 min-h-screen relative z-[2]">
+      <main className={`pt-20 pb-32 min-h-screen relative z-[2] transition-[padding-left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-64'}`}>
         <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
           <Routes>
             <Route path="/" element={<MusicQueueView />} />
