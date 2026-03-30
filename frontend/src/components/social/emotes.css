@@ -1,0 +1,37 @@
+/* Emote styles */
+.inline-emote {
+  display: inline-block;
+  vertical-align: middle;
+  height: 1.6em;
+  width: auto;
+  margin: 0 2px;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Ensure animated emotes play properly */
+.inline-emote[src$=".gif"] {
+  image-rendering: auto;
+}
+
+/* Emote picker hover tooltip */
+.emote-tooltip {
+  position: absolute;
+  bottom: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 60;
+}
+
+.emote-item:hover .emote-tooltip {
+  opacity: 1;
+}

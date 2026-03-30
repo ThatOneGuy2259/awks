@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
-import EmojiPicker, { Theme, type EmojiClickData } from 'emoji-picker-react';
+import EmojiPicker, { Theme, type EmojiClickData, Categories } from 'emoji-picker-react';
+import { EmotePicker } from './EmotePicker';
+import { useEmoteParser } from './useEmoteParser';
 
 interface LiveChatProps {
   onSend: (text: string) => void;
@@ -10,8 +12,11 @@ export function LiveChat({ onSend }: LiveChatProps) {
   const messages = useChatStore((s) => s.messages);
   const [input, setInput] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
+  const [showEmotes, setShowEmotes] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
+  const emoteRef = useRef<HTMLDivElement>(null);
+  const { parseMessage } = useEmoteParser();
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -27,6 +32,17 @@ export function LiveChat({ onSend }: LiveChatProps) {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showEmoji]);
+
+  useEffect(() => {
+    if (!showEmotes) return;
+    const handleClick = (e: MouseEvent) => {
+      if (emoteRef.current && !emoteRef.current.contains(e.target as Node)) {
+        setShowEmotes(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showEmotes]);
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -46,7 +62,7 @@ export function LiveChat({ onSend }: LiveChatProps) {
         )}
         {messages.map((msg, i) => (
           <div key={i} className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary-container/20 flex-shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold text-primary">
+            <div className="w-8 h-8 rounded-full bg-primary-container/20 shrink-0 overflow-hidden flex items-center justify-center text-xs font-bold text-primary">
               {msg.user.avatar_url ? (
                 <img className="w-full h-full object-cover" src={msg.user.avatar_url} alt={msg.user.username} loading="lazy" />
               ) : (
@@ -55,9 +71,10 @@ export function LiveChat({ onSend }: LiveChatProps) {
             </div>
             <div>
               <p className="text-[10px] text-primary font-bold mb-1">@{msg.user.username}</p>
-              <p className="text-sm text-on-surface-variant bg-surface-container-high p-3 rounded-tr-xl rounded-bl-xl rounded-br-xl">
-                {msg.text}
-              </p>
+              <p 
+                className="text-sm text-on-surface-variant bg-surface-container-high p-3 rounded-tr-xl rounded-bl-xl rounded-br-xl"
+                dangerouslySetInnerHTML={{ __html: parseMessage(msg.text) }}
+              />
             </div>
           </div>
         ))}
@@ -65,14 +82,44 @@ export function LiveChat({ onSend }: LiveChatProps) {
 
       <div className="p-4 bg-surface-container relative">
         {showEmoji && (
-          <div ref={emojiRef} className="absolute bottom-full right-4 mb-2 z-50">
+          <div ref={emojiRef} className="fixed bottom-20 right-4 z-50">
             <EmojiPicker
               theme={Theme.DARK}
               onEmojiClick={(emojiData: EmojiClickData) => { setInput((prev) => prev + emojiData.emoji); setShowEmoji(false); }}
-              height={300}
-              width={280}
-              previewConfig={{ showPreview: false }}
-              style={{ '--epr-emoji-size': '20px', '--epr-emoji-padding': '4px', '--epr-category-navigation-button-size': '18px' } as React.CSSProperties}
+              height={350}
+              width={320}
+              searchDisabled={false}
+              previewConfig={{ showPreview: true, defaultEmoji: '1f60a', defaultCaption: 'Smile' }}
+              categories={[
+                { name: 'Smiles & Emotions', category: Categories.SMILEYS_PEOPLE },
+                { name: 'People & Body', category: Categories.SMILEYS_PEOPLE },
+                { name: 'Animals & Nature', category: Categories.ANIMALS_NATURE },
+                { name: 'Food & Drink', category: Categories.FOOD_DRINK },
+                { name: 'Activities', category: Categories.ACTIVITIES },
+                { name: 'Travel & Places', category: Categories.TRAVEL_PLACES },
+                { name: 'Objects', category: Categories.OBJECTS },
+                { name: 'Symbols', category: Categories.SYMBOLS },
+                { name: 'Flags', category: Categories.FLAGS }
+              ]}
+              style={{ 
+                '--epr-emoji-size': '20px', 
+                '--epr-emoji-padding': '4px', 
+                '--epr-category-navigation-button-size': '18px',
+                '--epr-category-font-size': '12px',
+                '--epr-search-input-font-size': '14px',
+                '--epr-search-input-padding': '8px',
+                '--epr-search-input-height': '32px',
+                '--epr-picker-height': '350px',
+                '--epr-picker-width': '320px'
+              } as React.CSSProperties}
+            />
+          </div>
+        )}
+        {showEmotes && (
+          <div ref={emoteRef}>
+            <EmotePicker
+              onEmoteSelect={(emoteCode) => setInput((prev) => prev + ' ' + emoteCode + ' ')}
+              onClose={() => setShowEmotes(false)}
             />
           </div>
         )}
@@ -86,8 +133,22 @@ export function LiveChat({ onSend }: LiveChatProps) {
           />
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <button
-              onClick={() => setShowEmoji(!showEmoji)}
+              onClick={() => {
+                setShowEmoji(false);
+                setShowEmotes(!showEmotes);
+              }}
               className="text-on-surface-variant p-1.5 hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
+              title="Twitch Emotes"
+            >
+              <span className="material-symbols-outlined text-xl">face</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowEmotes(false);
+                setShowEmoji(!showEmoji);
+              }}
+              className="text-on-surface-variant p-1.5 hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
+              title="Emoji"
             >
               <span className="material-symbols-outlined text-xl">mood</span>
             </button>
