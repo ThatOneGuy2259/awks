@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../../stores/chatStore';
+import Picker from '@emoji-mart/react';
+import data from '@emoji-mart/data';
 
 interface LiveChatProps {
   onSend: (text: string) => void;
@@ -8,11 +10,29 @@ interface LiveChatProps {
 export function LiveChat({ onSend }: LiveChatProps) {
   const messages = useChatStore((s) => s.messages);
   const [input, setInput] = useState('');
+  const [showEmoji, setShowEmoji] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const emojiRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (!showEmoji) return;
+    const handleClick = (e: MouseEvent) => {
+      if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
+        setShowEmoji(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showEmoji]);
+
+  const handleEmojiSelect = (emoji: { native: string }) => {
+    setInput((prev) => prev + emoji.native);
+    setShowEmoji(false);
+  };
 
   const handleSend = () => {
     if (!input.trim()) return;
@@ -49,21 +69,34 @@ export function LiveChat({ onSend }: LiveChatProps) {
         ))}
       </div>
 
-      <div className="p-4 bg-surface-container">
+      <div className="p-4 bg-surface-container relative">
+        {showEmoji && (
+          <div ref={emojiRef} className="absolute bottom-full right-4 mb-2 z-50">
+            <Picker data={data} onEmojiSelect={handleEmojiSelect} theme="dark" previewPosition="none" skinTonePosition="none" />
+          </div>
+        )}
         <div className="relative">
           <input
-            className="w-full bg-surface-container-low border-none rounded-full py-3 pl-4 pr-12 text-sm focus:ring-1 focus:ring-primary/50 outline-none text-on-surface placeholder:text-on-surface-variant"
+            className="w-full bg-surface-container-low border-none rounded-full py-3 pl-4 pr-24 text-sm focus:ring-1 focus:ring-primary/50 outline-none text-on-surface placeholder:text-on-surface-variant"
             placeholder="Say something..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           />
-          <button
-            onClick={handleSend}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-primary p-1.5 hover:bg-primary/10 rounded-full transition-colors"
-          >
-            <span className="material-symbols-outlined">send</span>
-          </button>
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+            <button
+              onClick={() => setShowEmoji(!showEmoji)}
+              className="text-on-surface-variant p-1.5 hover:text-primary hover:bg-primary/10 rounded-full transition-colors"
+            >
+              <span className="material-symbols-outlined text-xl">mood</span>
+            </button>
+            <button
+              onClick={handleSend}
+              className="text-primary p-1.5 hover:bg-primary/10 rounded-full transition-colors"
+            >
+              <span className="material-symbols-outlined">send</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>

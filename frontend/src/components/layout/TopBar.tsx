@@ -14,7 +14,7 @@ export function TopBar() {
 
   return (
     <>
-      <header className={`fixed top-0 right-0 left-0 z-50 bg-background/60 backdrop-blur-xl flex items-center px-6 py-4 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:left-0' : 'lg:left-64'}`}>
+      <header className={`fixed top-0 right-0 left-0 z-50 bg-background/5 backdrop-blur-[2px] flex items-center px-6 py-4 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:left-0' : 'lg:left-64'}`}>
         <div className="flex items-center gap-2 lg:hidden">
           <AwksLogo className="h-7 w-auto" />
         </div>
