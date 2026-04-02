@@ -1,6 +1,7 @@
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useListenerStore } from '../../stores/listenerStore';
 import { VoteSkipButton } from '../social/VoteSkipButton';
+import { RemoveOwnSongButton } from '../social/RemoveOwnSongButton';
 
 export function NowPlayingHero() {
   const track = usePlaybackStore((s) => s.currentTrack);
@@ -65,8 +66,9 @@ export function NowPlayingHero() {
           </div>
         </div>
 
-        <div className="pt-4">
+        <div className="pt-4 flex flex-wrap items-center gap-4">
           <VoteSkipButton />
+          <RemoveOwnSongButton />
         </div>
       </div>
     </section>

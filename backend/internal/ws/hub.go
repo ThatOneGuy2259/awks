@@ -162,14 +162,24 @@ func (h *Hub) ListenerCount() int {
 }
 
 func (c *Client) WritePump() {
-	defer c.Conn.Close()
+	pingTicker := time.NewTicker(30 * time.Second)
+	defer func() {
+		pingTicker.Stop()
+		c.Conn.Close()
+	}()
 	for {
 		select {
 		case msg, ok := <-c.Send:
 			if !ok {
 				return
 			}
+			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := c.Conn.WriteMessage(websocket.TextMessage, msg); err != nil {
+				return
+			}
+		case <-pingTicker.C:
+			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		case <-c.Done:
@@ -186,6 +196,12 @@ func (c *Client) ReadPump(onMessage func(*Client, []byte)) {
 		c.Hub.Unregister(c)
 		c.Conn.Close()
 	}()
+	c.Conn.SetReadLimit(4096)
+	c.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+	c.Conn.SetPongHandler(func(string) error {
+		c.Conn.SetReadDeadline(time.Now().Add(45 * time.Second))
+		return nil
+	})
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {

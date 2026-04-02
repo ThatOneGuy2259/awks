@@ -219,7 +219,21 @@ export function useWebRTC() {
   // Connect once on mount — keep the connection alive across track changes
   useEffect(() => {
     const timer = setTimeout(connect, 1000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (pcRef.current) {
+        pcRef.current.close();
+        pcRef.current = null;
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close();
+        audioCtxRef.current = null;
+      }
+      analyserRef.current = null;
+      filtersRef.current = [];
+      gainNodeRef.current = null;
+      connectedRef.current = false;
+    };
   }, [connect]);
 
   // Subscribe to EQ band gain changes and update audio filters in real-time

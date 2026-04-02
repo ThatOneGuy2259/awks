@@ -3,6 +3,7 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -29,7 +30,8 @@ func NewAdminHandler(q store.Querier, p *service.PlaybackService, h *ws.Hub) *Ad
 func (h *AdminHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := h.queries.GetAllSettings(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[admin] error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	result := make(map[string]string)
@@ -37,6 +39,16 @@ func (h *AdminHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		result[s.Key] = s.Value
 	}
 	writeJSON(w, result)
+}
+
+var allowedSettingsKeys = map[string]bool{
+	"skip_votes_required": true,
+	"skip_mode":           true,
+	"skip_percent":        true,
+	"max_tracks_per_user": true,
+	"max_track_duration":  true,
+	"auto_dj_enabled":     true,
+	"auto_dj_time_override": true,
 }
 
 func (h *AdminHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +60,9 @@ func (h *AdminHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for key, value := range body {
+		if !allowedSettingsKeys[key] {
+			continue
+		}
 		h.queries.UpsertSetting(ctx, store.UpsertSettingParams{Key: key, Value: value})
 	}
 
@@ -106,7 +121,8 @@ func (h *AdminHandler) TimeoutUser(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt: expiresAt.Format(time.RFC3339),
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[admin] error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 

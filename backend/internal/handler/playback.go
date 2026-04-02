@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/mccann/awks3/backend/internal/service"
@@ -17,7 +18,8 @@ func NewPlaybackHandler(p *service.PlaybackService) *PlaybackHandler {
 func (h *PlaybackHandler) GetPlayback(w http.ResponseWriter, r *http.Request) {
 	state, err := h.playback.GetCurrentState(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[playback] error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	if state == nil {

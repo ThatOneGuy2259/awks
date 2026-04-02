@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -35,7 +36,8 @@ func NewQueueHandler(q store.Querier, p *service.PlaybackService, h *ws.Hub, api
 func (h *QueueHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.queries.GetQueue(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[queue] GetQueue error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -142,7 +144,8 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		AudioStatus:  "pending",
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[queue] InsertQueueItem error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -159,7 +162,22 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		go h.playback.AdvanceQueue(context.Background())
 	}
 
-	writeJSON(w, item)
+	// Map to QueueTrack to avoid exposing internal fields like audio_path
+	writeJSON(w, model.QueueTrack{
+		ID:          item.ID,
+		YouTubeURL:  item.YoutubeUrl,
+		VideoID:     item.VideoID,
+		Title:       item.Title,
+		Artist:      nullStr(item.Artist),
+		DurationSec: int(item.DurationSec),
+		ThumbnailURL: nullStr(item.ThumbnailUrl),
+		RequestedBy: item.RequestedBy,
+		RequesterName: username,
+		RequesterAvatar: avatarURL,
+		Position:    int(item.Position),
+		Status:      item.Status,
+		AudioStatus: item.AudioStatus,
+	})
 }
 
 func (h *QueueHandler) DeleteFromQueue(w http.ResponseWriter, r *http.Request) {

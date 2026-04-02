@@ -269,7 +269,7 @@ func main() {
 	queueH := handler.NewQueueHandler(queries, playbackSvc, hub, cfg.YouTubeAPIKey, cfg.YtdlpPath, extractor)
 	playbackH := handler.NewPlaybackHandler(playbackSvc)
 	adminH := handler.NewAdminHandler(queries, playbackSvc, hub)
-	wsH := handler.NewWSHandler(hub, peerManager)
+	wsH := handler.NewWSHandler(hub, peerManager, cfg.CORSOrigin)
 	historyH := handler.NewHistoryHandler(queries)
 	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath, queries)
 	suggestH := handler.NewSuggestHandler()
@@ -288,6 +288,14 @@ func main() {
 		AllowedHeaders:  []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}))
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	// WebSocket (no auth middleware)
 	r.Get("/ws", wsH.HandleWS)
@@ -296,6 +304,12 @@ func main() {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(auth.ClerkMiddleware(cfg.ClerkSecretKey))
 		r.Use(httprate.LimitByIP(120, time.Minute)) // 120 requests per minute per IP
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+				next.ServeHTTP(w, r)
+			})
+		})
 
 		r.Get("/queue", queueH.GetQueue)
 		r.Post("/queue", queueH.AddToQueue)
@@ -351,8 +365,11 @@ func main() {
 
 	// Serve
 	srv := &http.Server{
-		Addr:    ":" + cfg.Port,
-		Handler: r,
+		Addr:              ":" + cfg.Port,
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {

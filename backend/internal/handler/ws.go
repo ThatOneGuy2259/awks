@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
@@ -16,41 +17,92 @@ import (
 	"github.com/mccann/awks3/backend/internal/ws"
 )
 
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true },
-}
-
 type WSHandler struct {
-	hub         *ws.Hub
-	peerManager *audio.PeerManager
+	hub            *ws.Hub
+	peerManager    *audio.PeerManager
+	allowedOrigins []string
 }
 
-func NewWSHandler(hub *ws.Hub, pm *audio.PeerManager) *WSHandler {
-	return &WSHandler{hub: hub, peerManager: pm}
+func NewWSHandler(hub *ws.Hub, pm *audio.PeerManager, corsOrigin string) *WSHandler {
+	origins := strings.Split(corsOrigin, ",")
+	for i := range origins {
+		origins[i] = strings.TrimSpace(origins[i])
+	}
+	return &WSHandler{hub: hub, peerManager: pm, allowedOrigins: origins}
 }
 
 func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
-	// Verify Clerk JWT from query parameter
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		http.Error(w, "missing token", http.StatusUnauthorized)
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			for _, allowed := range h.allowedOrigins {
+				if origin == allowed {
+					return true
+				}
+			}
+			log.Printf("[ws] rejected origin: %s", origin)
+			return false
+		},
+	}
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("ws upgrade error: %v", err)
 		return
 	}
 
-	claims, err := jwt.Verify(context.Background(), &jwt.VerifyParams{Token: token})
+	// Wait for AUTH message as the first message (10s timeout)
+	conn.SetReadLimit(4096)
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		log.Printf("[ws] auth read error: %v", err)
+		conn.Close()
+		return
+	}
+
+	var authMsg struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &authMsg); err != nil || authMsg.Type != "AUTH" {
+		log.Printf("[ws] expected AUTH message, got: %s", authMsg.Type)
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "expected AUTH"))
+		conn.Close()
+		return
+	}
+
+	var authData struct {
+		Token string `json:"token"`
+	}
+	if err := json.Unmarshal(authMsg.Data, &authData); err != nil || authData.Token == "" {
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "missing token"))
+		conn.Close()
+		return
+	}
+
+	claims, err := jwt.Verify(context.Background(), &jwt.VerifyParams{Token: authData.Token})
 	if err != nil {
 		log.Printf("[ws] invalid token: %v", err)
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		conn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "invalid token"))
+		conn.Close()
 		return
 	}
 
 	userID := claims.Subject
 
+	// Reset read deadline after successful auth
+	conn.SetReadDeadline(time.Time{})
+
 	// Fetch user details from Clerk
 	clerkUser, err := user.Get(r.Context(), userID)
 	if err != nil {
 		log.Printf("[ws] clerk get user error: %v", err)
-		http.Error(w, "could not resolve user", http.StatusUnauthorized)
+		conn.Close()
 		return
 	}
 
@@ -77,12 +129,6 @@ func (h *WSHandler) HandleWS(w http.ResponseWriter, r *http.Request) {
 	avatar := ""
 	if clerkUser.ImageURL != nil {
 		avatar = *clerkUser.ImageURL
-	}
-
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("ws upgrade error: %v", err)
-		return
 	}
 
 	client := &ws.Client{
@@ -124,6 +170,9 @@ func (h *WSHandler) handleMessage(c *ws.Client, raw []byte) {
 		}
 		if err := json.Unmarshal(msg.Data, &data); err != nil || data.Text == "" {
 			return
+		}
+		if len(data.Text) > 500 {
+			data.Text = data.Text[:500]
 		}
 		h.hub.Broadcast(model.WSMessage{
 			Type: "CHAT_MESSAGE",
