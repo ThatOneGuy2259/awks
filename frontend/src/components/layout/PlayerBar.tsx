@@ -7,6 +7,7 @@ import { VisualizerEQ } from '../player/VisualizerEQ';
 import { api } from '../../lib/api';
 import { useVisualizer } from '../../hooks/useVisualizer';
 import { useUIStore } from '../../stores/uiStore';
+import { RemoveOwnSongButton } from '../social/RemoveOwnSongButton';
 
 interface PlayerBarProps {
   volume: number;
@@ -114,6 +115,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
         </div>
 
         {skipButton(true)}
+        <RemoveOwnSongButton compact />
 
         <div className="flex items-center gap-2 flex-shrink-0">
           {eqButton}
@@ -135,7 +137,10 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
 
         <div className="flex flex-col items-center gap-2 w-1/3">
           <div className="flex flex-col items-center gap-3 w-full">
-            {skipButton(false)}
+            <div className="flex items-center gap-3">
+              {skipButton(false)}
+              <RemoveOwnSongButton />
+            </div>
             <div className="w-full max-w-md">
               {progressBar}
             </div>
