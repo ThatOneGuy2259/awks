@@ -47,6 +47,14 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
           22484632   // Shroud
         ];
 
+        // Channels that have BTTV/FFZ emotes (others 404)
+        const bttvFfzChannelIds = [
+          44317909,  // xQc
+          51257523,  // Pokimane
+          36029255,  // Summit1g
+          22484632   // Shroud
+        ];
+
         // Fetch global emotes from each platform (undefined for global emotes)
         // Wrap each fetch in try-catch to prevent one failure from breaking everything
         const results = await Promise.allSettled([
@@ -70,15 +78,19 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
           throw new Error('All emote providers failed to load');
         }
 
-        // Fetch emotes from popular channels for more variety
-        const channelPromises = popularChannelIds.map(channelId =>
-          Promise.all([
-            fetcher.fetchBTTVEmotes(channelId).catch(() => {}),
-            fetcher.fetchFFZEmotes(channelId).catch(() => {}),
+        // Fetch per-channel emotes: 7TV for all, BTTV/FFZ only for channels that have them
+        const channelPromises = [
+          ...popularChannelIds.map(channelId =>
             fetcher.fetchSevenTVEmotes(channelId, { format: 'webp' }).catch(() => {})
-          ])
-        );
-        
+          ),
+          ...bttvFfzChannelIds.map(channelId =>
+            Promise.all([
+              fetcher.fetchBTTVEmotes(channelId).catch(() => {}),
+              fetcher.fetchFFZEmotes(channelId).catch(() => {}),
+            ])
+          ),
+        ];
+
         await Promise.all(channelPromises);
         
         console.log(`Finished fetching. Total emotes in fetcher: ${fetcher.emotes.size}`);

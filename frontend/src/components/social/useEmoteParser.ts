@@ -28,6 +28,14 @@ export function useEmoteParser() {
           22484632   // Shroud
         ];
 
+        // Channels that have BTTV/FFZ emotes (others 404)
+        const bttvFfzChannelIds = [
+          44317909,  // xQc
+          51257523,  // Pokimane
+          36029255,  // Summit1g
+          22484632   // Shroud
+        ];
+
         // Fetch global emotes from each platform
         await Promise.all([
           fetcher.fetchBTTVEmotes(undefined).catch(() => {}),
@@ -35,15 +43,19 @@ export function useEmoteParser() {
           fetcher.fetchSevenTVEmotes(undefined, { format: 'webp' }).catch(() => {})
         ]);
 
-        // Fetch emotes from popular channels for more variety
-        const channelPromises = popularChannelIds.map(channelId =>
-          Promise.all([
-            fetcher.fetchBTTVEmotes(channelId).catch(() => {}),
-            fetcher.fetchFFZEmotes(channelId).catch(() => {}),
+        // Fetch per-channel emotes: 7TV for all, BTTV/FFZ only for channels that have them
+        const channelPromises = [
+          ...popularChannelIds.map(channelId =>
             fetcher.fetchSevenTVEmotes(channelId, { format: 'webp' }).catch(() => {})
-          ])
-        );
-        
+          ),
+          ...bttvFfzChannelIds.map(channelId =>
+            Promise.all([
+              fetcher.fetchBTTVEmotes(channelId).catch(() => {}),
+              fetcher.fetchFFZEmotes(channelId).catch(() => {}),
+            ])
+          ),
+        ];
+
         await Promise.all(channelPromises);
 
         parserRef.current = new EmoteParser(fetcher, {
