@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -28,7 +29,8 @@ func (h *HistoryHandler) GetHistory(w http.ResponseWriter, r *http.Request) {
 		Offset: int64(offset),
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[history] error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -46,7 +48,8 @@ func (h *HistoryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.queries.DeleteHistoryEntry(r.Context(), id); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[history] error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -54,7 +57,8 @@ func (h *HistoryHandler) DeleteEntry(w http.ResponseWriter, r *http.Request) {
 
 func (h *HistoryHandler) ClearAll(w http.ResponseWriter, r *http.Request) {
 	if err := h.queries.ClearHistory(r.Context()); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		log.Printf("[history] error: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

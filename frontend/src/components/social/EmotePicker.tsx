@@ -1,14 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import { EmoteFetcher, EmoteParser } from '@mkody/twitch-emoticons';
+import { useState, useEffect } from 'react';
+import { useEmoteStore } from '../../stores/emoteStore';
 import './emotes.css';
-
-interface Emote {
-  id: string;
-  code: string;
-  link: string;
-  animated: boolean;
-  provider: 'twitch' | 'bttv' | 'ffz' | '7tv';
-}
 
 interface EmotePickerProps {
   onEmoteSelect: (emoteCode: string) => void;
@@ -16,211 +8,21 @@ interface EmotePickerProps {
 }
 
 export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
-  const [emotes, setEmotes] = useState<Emote[]>([]);
+  const emotes = useEmoteStore((s) => s.emotes);
+  const loading = useEmoteStore((s) => s.loading);
+  const initialize = useEmoteStore((s) => s.initialize);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
-  const fetcherRef = useRef<EmoteFetcher | null>(null);
-  const parserRef = useRef<EmoteParser | null>(null);
 
   useEffect(() => {
-    const initializeEmotes = async () => {
-      try {
-        // Initialize fetcher without Twitch credentials (using only third-party emotes)
-        const fetcher = new EmoteFetcher({
-          forceStatic: false,
-          twitchThemeMode: 'dark'
-        });
-        fetcherRef.current = fetcher;
+    initialize();
+  }, [initialize]);
 
-        // Popular Twitch channel IDs for more emotes
-        // These are well-known channels with lots of emotes
-        const popularChannelIds = [
-          44317909,  // xQc
-          129955881, // Kai Cenat
-          51257523,  // Pokimane
-          4664781,   // Myth
-          138864227, // Adin Ross
-          19614509,  // NICKMERCS
-          18991531,  // TimTheTatman
-          15188617,  // Lirik
-          36029255,  // Summit1g
-          22484632   // Shroud
-        ];
+  const filteredEmotes = emotes.filter(emote =>
+    emote.code.toLowerCase().includes(search.toLowerCase())
+  );
 
-        // Channels that have BTTV/FFZ emotes (others 404)
-        const bttvFfzChannelIds = [
-          44317909,  // xQc
-          51257523,  // Pokimane
-          36029255,  // Summit1g
-          22484632   // Shroud
-        ];
-
-        // Fetch global emotes from each platform (undefined for global emotes)
-        // Wrap each fetch in try-catch to prevent one failure from breaking everything
-        const results = await Promise.allSettled([
-          fetcher.fetchBTTVEmotes(undefined).catch(e => {
-            console.warn('BTTV global fetch failed:', e);
-            return null;
-          }),
-          fetcher.fetchFFZEmotes(undefined).catch(e => {
-            console.warn('FFZ global fetch failed:', e);
-            return null;
-          }),
-          fetcher.fetchSevenTVEmotes(undefined, { format: 'webp' }).catch(e => {
-            console.warn('7TV global fetch failed:', e);
-            return null;
-          })
-        ]);
-
-        // Check if any succeeded
-        const anySuccess = results.some(r => r.status === 'fulfilled' && r.value !== null);
-        if (!anySuccess) {
-          throw new Error('All emote providers failed to load');
-        }
-
-        // Fetch per-channel emotes: 7TV for all, BTTV/FFZ only for channels that have them
-        const channelPromises = [
-          ...popularChannelIds.map(channelId =>
-            fetcher.fetchSevenTVEmotes(channelId, { format: 'webp' }).catch(() => {})
-          ),
-          ...bttvFfzChannelIds.map(channelId =>
-            Promise.all([
-              fetcher.fetchBTTVEmotes(channelId).catch(() => {}),
-              fetcher.fetchFFZEmotes(channelId).catch(() => {}),
-            ])
-          ),
-        ];
-
-        await Promise.all(channelPromises);
-        
-        console.log(`Finished fetching. Total emotes in fetcher: ${fetcher.emotes.size}`);
-        if (fetcher.emotes.size === 0) {
-          console.warn('No emotes were fetched. This might indicate a network or API issue.');
-          throw new Error('No emotes were successfully fetched');
-        }
-
-        // Convert to our Emote format
-        const allEmotes: Emote[] = [];
-        const seenEmotes = new Set<string>(); // Track unique emote IDs
-        
-        fetcher.emotes.forEach((emote) => {
-          const uniqueKey = `${emote.type}-${emote.id}`;
-          if (!seenEmotes.has(uniqueKey)) {
-            seenEmotes.add(uniqueKey);
-            allEmotes.push({
-              id: emote.id,
-              code: emote.code,
-              link: emote.toLink(),
-              animated: (emote as unknown as { animated?: boolean }).animated || false,
-              provider: emote.type as 'twitch' | 'bttv' | 'ffz' | '7tv'
-            });
-          }
-        });
-
-        setEmotes(allEmotes);
-
-        // Initialize parser for later use
-        parserRef.current = new EmoteParser(fetcher, {
-          type: 'html',
-          template: `<img alt="{name}" title="{name}" class="inline-emote" src="{link}" />`
-        });
-      } catch (error) {
-        console.error('Failed to load emotes:', error);
-        console.error('Error type:', error?.constructor?.name);
-        console.error('Error message:', error instanceof Error ? error.message : 'Unknown error');
-        console.error('Stack trace:', error instanceof Error ? error.stack : 'No stack trace available');
-        
-        // Provide a basic set of emotes as fallback
-        const basicEmotes: Emote[] = [
-          {
-            id: 'pepega',
-            code: 'Pepega',
-            link: 'https://cdn.betterttv.net/emote/5849c9a4f52fbdd5ac2e4c2c/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'pog',
-            code: 'Pog',
-            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef2d/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'kekw',
-            code: 'KEKW',
-            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef36/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'sadge',
-            code: 'Sadge',
-            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef31/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'monkas',
-            code: 'MonkaS',
-            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef32/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'lulw',
-            code: 'LULW',
-            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef37/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'omegalul',
-            code: 'OMEGALUL',
-            link: 'https://cdn.betterttv.net/emote/5e9ca7756833236c47beef38/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'pepelaugh',
-            code: 'PepeLaugh',
-            link: 'https://cdn.betterttv.net/emote/566ca92365dbbdab32ec053a/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'pepehands',
-            code: 'PepeHands',
-            link: 'https://cdn.betterttv.net/emote/5e76233d1344a4562ec642de/3x',
-            animated: false,
-            provider: 'bttv'
-          },
-          {
-            id: 'kappa',
-            code: 'Kappa',
-            link: 'https://static-cdn.jtvnw.net/emoticons/v1/25/3.0',
-            animated: false,
-            provider: 'twitch'
-          }
-        ];
-        
-        console.log('Using basic fallback emotes:', basicEmotes.length);
-        setEmotes(basicEmotes);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeEmotes();
-  }, []);
-
-  const filteredEmotes = emotes.filter(emote => {
-    const matchesSearch = emote.code.toLowerCase().includes(search.toLowerCase());
-    return matchesSearch;
-  });
-
-  const handleEmoteClick = (emote: Emote) => {
-    onEmoteSelect(emote.code);
+  const handleEmoteClick = (code: string) => {
+    onEmoteSelect(code);
     onClose();
   };
 
@@ -230,7 +32,7 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
       <div className="p-3 border-b border-outline-variant/10 shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold text-on-surface">
-            Emotes 
+            Emotes
             {!loading && <span className="text-xs text-on-surface-variant ml-2">({emotes.length})</span>}
           </h3>
           <button
@@ -269,7 +71,7 @@ export function EmotePicker({ onEmoteSelect, onClose }: EmotePickerProps) {
             {filteredEmotes.map((emote) => (
               <button
                 key={`${emote.provider}-${emote.id}-${emote.code}`}
-                onClick={() => handleEmoteClick(emote)}
+                onClick={() => handleEmoteClick(emote.code)}
                 className="aspect-square bg-surface-container rounded hover:bg-surface-container-highest transition-colors p-1 flex items-center justify-center group relative"
                 title={emote.code}
               >

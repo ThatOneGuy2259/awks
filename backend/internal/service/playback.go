@@ -191,11 +191,10 @@ func (s *PlaybackService) SkipCurrent(ctx context.Context, reason string) {
 
 	// Schedule audio file cleanup (skip auto-DJ tracks — they're permanent)
 	if current.AudioPath.Valid && !strings.Contains(current.AudioPath.String, "auto-dj-cache") {
-		go func(path string) {
-			time.Sleep(30 * time.Second)
-			os.Remove(path)
-			log.Printf("[playback] cleaned up audio file: %s", path)
-		}(current.AudioPath.String)
+		select {
+		case s.cleanupCh <- current.AudioPath.String:
+		default:
+		}
 	}
 
 	s.mu.Unlock()

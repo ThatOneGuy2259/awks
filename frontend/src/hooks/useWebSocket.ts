@@ -16,6 +16,7 @@ const WS_URL = import.meta.env.VITE_WS_URL || `${wsProtocol}//${window.location.
 let ws: WebSocket | null = null;
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let pendingMessages: string[] = [];
+let reconnectDelay = 2000; // exponential backoff starting point
 
 type MessageCallback = (data: unknown) => void;
 const messageCallbacks: Map<string, Set<MessageCallback>> = new Map();
@@ -46,12 +47,14 @@ function connectWs(token: string) {
   if (ws && ws.readyState <= WebSocket.OPEN) return;
 
   useConnectionStore.getState().setStatus('connecting');
-  const params = new URLSearchParams({ token });
-  const socket = new WebSocket(`${WS_URL}?${params.toString()}`);
+  const socket = new WebSocket(WS_URL);
   ws = socket;
 
   socket.onopen = () => {
-    console.log('[WS] connected');
+    console.log('[WS] connected, authenticating...');
+    // Send auth token as first message instead of in query string
+    socket.send(JSON.stringify({ type: 'AUTH', data: { token } }));
+    reconnectDelay = 2000; // reset backoff on successful connection
     useConnectionStore.getState().setStatus('connected');
     // Flush any messages queued before the socket was ready
     for (const msg of pendingMessages) {
@@ -96,17 +99,18 @@ function connectWs(token: string) {
   };
 
   socket.onclose = () => {
-    console.log('[WS] disconnected, reconnecting...');
+    console.log(`[WS] disconnected, reconnecting in ${reconnectDelay / 1000}s...`);
     ws = null;
     useConnectionStore.getState().setStatus('disconnected');
-    // Get a fresh token on reconnect (Clerk tokens are short-lived)
+    const delay = reconnectDelay;
+    reconnectDelay = Math.min(reconnectDelay * 2, 60000); // cap at 60s
     setTimeout(() => {
       if (getTokenFn) {
         getTokenFn().then((freshToken) => {
           if (freshToken) connectWs(freshToken);
         });
       }
-    }, 2000);
+    }, delay);
   };
 
   socket.onerror = () => socket.close();

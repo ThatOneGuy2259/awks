@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 
@@ -53,7 +54,7 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		meta, err := service.ResolveVideoMeta(videoID, h.apiKey, h.ytdlpPath)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "could not resolve video", http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, filterByDuration([]service.SearchResult{{
@@ -70,7 +71,8 @@ func (h *SearchHandler) Search(w http.ResponseWriter, r *http.Request) {
 	if err != nil || len(results) == 0 {
 		results, err = service.SearchYouTube(query, h.apiKey)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("[search] error: %v", err)
+			http.Error(w, "search failed", http.StatusInternalServerError)
 			return
 		}
 	}

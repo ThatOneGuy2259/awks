@@ -128,6 +128,7 @@ export function LiveChat({ onSend }: LiveChatProps) {
             className="w-full bg-surface-container-low border-none rounded-full py-3 pl-4 pr-32 text-sm focus:ring-1 focus:ring-primary/50 outline-none text-on-surface placeholder:text-on-surface-variant"
             placeholder="Say something..."
             value={input}
+            maxLength={500}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           />

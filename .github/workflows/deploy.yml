@@ -23,7 +23,7 @@ jobs:
             HostName ${{ secrets.DEPLOY_HOST }}
             User box
             IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking no
+            StrictHostKeyChecking accept-new
             ProxyCommand cloudflared access ssh --hostname %h
           EOF
 
