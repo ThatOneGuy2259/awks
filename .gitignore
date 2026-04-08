@@ -32,6 +32,7 @@ Thumbs.db
 
 # AI agent artifacts
 .claude/
+.worktrees/
 docs/superpowers/
 PROMPT.md
 stitch/

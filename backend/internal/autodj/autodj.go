@@ -21,6 +21,12 @@ var playlistURLs = []string{
 	"https://music.youtube.com/playlist?list=OLAK5uy_nqZhqerW6fOvpJVbVB9yWMbnpDcJ6wz80",
 }
 
+// blacklistedVideoIDs are tracks that should never be picked by the auto-DJ,
+// even if they're cached on disk.
+var blacklistedVideoIDs = map[string]bool{
+	"y0tHBFsenr8": true, // LoFi Concentration Glow
+}
+
 const SystemUserID = "auto-dj"
 
 var chicagoTZ *time.Location
@@ -82,6 +88,9 @@ func (b *ShuffleBag) refill() {
 	b.remaining = make([]string, 0, len(matches))
 	for _, m := range matches {
 		vid := strings.TrimSuffix(filepath.Base(m), ".opus")
+		if blacklistedVideoIDs[vid] {
+			continue
+		}
 		b.remaining = append(b.remaining, vid)
 	}
 	// Fisher-Yates shuffle

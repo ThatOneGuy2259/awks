@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { themes, useThemeStore, applyTheme, type ThemeDefinition } from '../../stores/themeStore';
 import { useCustomThemeStore } from '../../stores/customThemeStore';
 import { useVisualizerStore, type BackgroundEffect } from '../../stores/visualizerStore';
@@ -18,6 +19,7 @@ const BG_EFFECTS: { value: BackgroundEffect; label: string; icon: string }[] = [
 ];
 
 export function ThemeModal({ onClose }: ThemeModalProps) {
+  const navigate = useNavigate();
   const { currentTheme, setTheme } = useThemeStore();
   const { customThemes, deleteTheme, exportTheme, importTheme } = useCustomThemeStore();
   const { backgroundEffect, backgroundIntensity, setBackgroundEffect, setBackgroundIntensity } = useVisualizerStore();
@@ -33,6 +35,10 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
   const handleSelect = (theme: ThemeDefinition) => {
     setTheme(theme.id);
     applyTheme(theme);
+    if (theme.kind === 'page' && theme.route) {
+      onClose();
+      navigate(theme.route);
+    }
   };
 
   const handleExport = (id: string) => {
