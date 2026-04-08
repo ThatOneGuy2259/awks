@@ -1,0 +1,852 @@
+/* WMP-specific styles, scoped to .wmp-app by postcss-prefix-selector */
+/* Targets the WMP11 dark/black aesthetic. */
+
+.wmp-app {
+  background: #000;
+  height: 100vh;
+  overflow: hidden;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  color: #e8e8e8;
+}
+
+/* ============================================================
+   Shell container
+   ============================================================ */
+.wmp-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: linear-gradient(180deg, #0e1420 0%, #050811 100%);
+  color: #e8e8e8;
+  border: 1px solid #000;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   Title bar — slim, dark, just icon + title + window controls
+   ============================================================ */
+.wmp-title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 2px 0 6px;
+  background: linear-gradient(180deg, #2a3850 0%, #131a28 50%, #060b16 100%);
+  border-bottom: 1px solid #000;
+  user-select: none;
+  flex-shrink: 0;
+}
+.wmp-title-bar__left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #e6ecf5;
+  font-weight: 600;
+  font-size: 12px;
+  text-shadow: 0 1px 0 #000;
+}
+.wmp-title-bar__icon {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #ff8c00 0%, #ff6a00 40%, #b04200 100%);
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  position: relative;
+  box-shadow: 0 0 4px rgba(255, 140, 0, 0.5);
+}
+.wmp-title-bar__icon::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid #fff;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+.wmp-title-bar__controls {
+  display: flex;
+  gap: 1px;
+}
+.wmp-title-bar__btn {
+  width: 28px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, #2a3850, #131a28 50%, #060b16);
+  color: #cfd6e0;
+  font-size: 11px;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wmp-title-bar__btn:hover {
+  background: linear-gradient(180deg, #3c4d6c, #1a2538 50%, #0a1322);
+  color: #fff;
+}
+.wmp-title-bar__btn--close:hover {
+  background: linear-gradient(180deg, #d94438, #a02818 50%, #6a1808);
+  color: #fff;
+}
+
+/* ============================================================
+   Tab row — back/forward arrows on left, tabs centered, options on right
+   This replaces the old menu bar + nav strip + separate tab strip.
+   ============================================================ */
+.wmp-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: linear-gradient(180deg, #060b16 0%, #0a1320 100%);
+  border-bottom: 1px solid #000;
+  flex-shrink: 0;
+  height: 44px;
+  box-sizing: border-box;
+}
+.wmp-tab-row__nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.wmp-nav-arrow {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #1a3a6e;
+  background:
+    radial-gradient(circle at 50% 25%, #5b8acb 0%, #2c5a9c 40%, #0b2247 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.wmp-nav-arrow:hover:not(:disabled) {
+  background:
+    radial-gradient(circle at 50% 25%, #6f9ddc 0%, #3669ad 40%, #163058 100%);
+}
+.wmp-nav-arrow:disabled {
+  opacity: 0.45;
+}
+.wmp-tab-row__tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+  margin-left: 8px;
+}
+.wmp-tab-row__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* WMP11-style tabs: blend with chrome, active tab gets a chevron underneath */
+.wmp-tab {
+  position: relative;
+  padding: 6px 22px 8px 22px;
+  background: transparent;
+  border: none;
+  color: #b0bccc;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  text-shadow: 0 1px 0 #000;
+}
+.wmp-tab:hover {
+  color: #fff;
+}
+.wmp-tab--active {
+  color: #fff;
+  background:
+    radial-gradient(ellipse at center top, rgba(80, 130, 200, 0.4) 0%, transparent 70%);
+}
+.wmp-tab--active::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 7px solid #2a3850;
+}
+
+/* Options >> button (replaces the menu bar) */
+.wmp-options-button {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #1a3a6e;
+  background:
+    radial-gradient(circle at 50% 25%, #5b8acb 0%, #2c5a9c 40%, #0b2247 100%);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.wmp-options-button:hover {
+  background:
+    radial-gradient(circle at 50% 25%, #6f9ddc 0%, #3669ad 40%, #163058 100%);
+}
+.wmp-options-popover {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  min-width: 220px;
+  background: linear-gradient(180deg, #1a2538 0%, #0a1322 100%);
+  border: 1px solid #1a3a6e;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+  z-index: 30;
+  padding: 4px 0;
+}
+.wmp-options-popover__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  color: #cfd6e0;
+  cursor: default;
+}
+.wmp-options-popover__item:hover:not(:disabled) {
+  background: linear-gradient(180deg, #2c5a9c, #163058);
+  color: #fff;
+}
+.wmp-options-popover__item:disabled {
+  color: #5a6678;
+}
+.wmp-options-popover__separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* Search input — dark, slim, in the tab row right area */
+.wmp-search {
+  display: flex;
+  align-items: center;
+}
+.wmp-search__input {
+  width: 200px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid #1a3a6e;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #050811, #0a1322);
+  color: #cfd6e0;
+  outline: none;
+}
+.wmp-search__input:focus {
+  border-color: #2c5a9c;
+  box-shadow: 0 0 0 1px rgba(80, 130, 200, 0.5);
+}
+.wmp-search__input::placeholder {
+  color: #5a6678;
+}
+
+/* ============================================================
+   Content slot
+   ============================================================ */
+.wmp-shell__content {
+  flex: 1 1 0%;
+  position: relative;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ============================================================
+   Status bar — minimal, dark, sits at bottom
+   ============================================================ */
+.wmp-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 20px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #0a1322, #050811);
+  border-top: 1px solid #000;
+  font-size: 10px;
+  color: #7a8699;
+  flex-shrink: 0;
+}
+.wmp-status-bar__segment {
+  padding: 0 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+.wmp-status-bar__segment:last-child {
+  border-right: none;
+}
+
+/* ============================================================
+   Library view — dark theme to match
+   ============================================================ */
+.wmp-library {
+  display: flex;
+  height: 100%;
+  background: linear-gradient(180deg, #0a1322 0%, #050811 100%);
+}
+.wmp-library__nav-tree {
+  width: 220px;
+  background: linear-gradient(180deg, #131a28, #0a1322);
+  border-right: 1px solid #000;
+  padding: 8px 0;
+  font-size: 12px;
+  color: #b0bccc;
+}
+.wmp-library__nav-heading {
+  padding: 4px 16px;
+  font-weight: 700;
+  color: #6f9ddc;
+  margin-top: 4px;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+.wmp-library__nav-item {
+  padding: 4px 32px;
+  cursor: default;
+}
+.wmp-library__nav-item:hover {
+  background: rgba(80, 130, 200, 0.15);
+  color: #fff;
+}
+.wmp-library__nav-item--active {
+  background: linear-gradient(180deg, #2c5a9c, #0b2247);
+  color: #fff;
+}
+
+.wmp-library__content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #0a1322 0%, #050811 100%);
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.wmp-list-row {
+  display: grid;
+  grid-template-columns: 3fr 2fr 0.7fr 1.5fr 1.4fr;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #cfd6e0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.wmp-list-row__cell {
+  padding: 2px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wmp-list-row--header {
+  background: linear-gradient(180deg, #1a2538, #0a1322);
+  border-bottom: 1px solid #1a3a6e;
+  font-weight: 700;
+  color: #6f9ddc;
+  position: sticky;
+  top: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.wmp-library__col-btn {
+  background: transparent;
+  border: none;
+  font-weight: 700;
+  text-align: left;
+  padding: 0;
+  font-size: 11px;
+  color: inherit;
+  cursor: default;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.wmp-list-row:hover:not(.wmp-list-row--header) {
+  background: rgba(80, 130, 200, 0.1);
+  color: #fff;
+}
+.wmp-list-row--selected {
+  background: linear-gradient(180deg, #2c5a9c, #0b2247) !important;
+  color: #fff;
+}
+.wmp-list-row--playing:not(.wmp-list-row--header) {
+  background: rgba(80, 130, 200, 0.12);
+  color: #fff;
+}
+.wmp-list-row--playing.wmp-list-row--selected {
+  background: linear-gradient(180deg, #3669ad, #163058) !important;
+}
+.wmp-library__playing-title {
+  font-weight: 700;
+  color: #8ec0ff;
+}
+.wmp-library__playing-indicator {
+  display: inline-block;
+  margin-right: 6px;
+  color: #8ec0ff;
+  font-size: 10px;
+}
+.wmp-library__skip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  background: linear-gradient(180deg, #2a3850, #0a1322);
+  border: 1px solid rgba(80, 130, 200, 0.4);
+  border-radius: 10px;
+  color: #cfd6e0;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: default;
+  text-shadow: 0 1px 0 #000;
+}
+.wmp-library__skip-btn:hover {
+  background: linear-gradient(180deg, #3c4d6c, #131a28);
+  border-color: rgba(120, 170, 240, 0.6);
+  color: #fff;
+}
+.wmp-library__skip-btn--active {
+  background: radial-gradient(circle at 50% 30%, #ffd76a 0%, #f4a800 60%, #a46a00 100%);
+  color: #1a1000;
+  border-color: rgba(255, 200, 80, 0.7);
+  text-shadow: none;
+}
+.wmp-library__skip-btn--active:hover {
+  background: radial-gradient(circle at 50% 30%, #ffe58a 0%, #ffba33 60%, #c08000 100%);
+  color: #1a1000;
+}
+.wmp-library__action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.wmp-library__remove-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  background: linear-gradient(180deg, #2a3850, #0a1322);
+  border: 1px solid rgba(180, 60, 60, 0.4);
+  border-radius: 10px;
+  color: #b0bccc;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: default;
+  text-shadow: 0 1px 0 #000;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.wmp-list-row:hover .wmp-library__remove-btn {
+  opacity: 1;
+}
+.wmp-library__remove-btn--always {
+  opacity: 1;
+}
+.wmp-library__remove-btn:hover {
+  background: linear-gradient(180deg, #6a2828, #2a0808);
+  border-color: rgba(220, 80, 80, 0.7);
+  color: #ffd6d6;
+}
+
+.wmp-library__rows {
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+}
+.wmp-library__empty {
+  padding: 32px;
+  text-align: center;
+  color: #5a6678;
+  font-size: 12px;
+}
+
+/* Search results dropdown */
+.wmp-search__dropdown {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 420px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #1a2538, #0a1322);
+  border: 1px solid #1a3a6e;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.7);
+  z-index: 15;
+}
+.wmp-search__dropdown-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+  cursor: default;
+  color: #cfd6e0;
+}
+.wmp-search__dropdown-row:hover {
+  background: linear-gradient(180deg, #2c5a9c, #163058);
+  color: #fff;
+}
+.wmp-search__dropdown-title {
+  display: block;
+  font-weight: 600;
+}
+.wmp-search__dropdown-artist {
+  display: block;
+  font-size: 11px;
+  color: #7a8699;
+}
+.wmp-search__dropdown-status {
+  padding: 12px;
+  text-align: center;
+  font-size: 12px;
+  color: #7a8699;
+}
+.wmp-search__dropdown-status--error {
+  color: #ff6a6a;
+}
+.wmp-search__dropdown-row--suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  font-style: normal;
+}
+.wmp-search__dropdown-suggestion-icon {
+  color: #6f9ddc;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.wmp-search__dropdown-hint {
+  padding: 6px 14px;
+  font-size: 10px;
+  color: #5a6678;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Custom scrollbars for the dark theme */
+.wmp-app *::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+.wmp-app *::-webkit-scrollbar-track {
+  background: #0a1322;
+  border-left: 1px solid #000;
+}
+.wmp-app *::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #2c5a9c, #163058);
+  border: 2px solid #0a1322;
+  border-radius: 7px;
+}
+.wmp-app *::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #3669ad, #1a3a6e);
+}
+
+/* ============================================================
+   Now Playing view
+   ============================================================ */
+.wmp-now-playing {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  color: #fff;
+  overflow: hidden;
+}
+.wmp-now-playing__gradient-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 30%;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, 0.6) 60%, rgba(0, 0, 0, 0.85));
+  pointer-events: none;
+}
+.wmp-now-playing__up-next {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(80, 130, 200, 0.4);
+  border-radius: 2px;
+  font-size: 12px;
+  color: #cfd6e0;
+}
+.wmp-now-playing__track-info {
+  position: absolute;
+  left: 24px;
+  bottom: 100px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  max-width: 60%;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+.wmp-now-playing__art {
+  width: 100px;
+  height: 100px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
+}
+.wmp-now-playing__text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.wmp-now-playing__title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.wmp-now-playing__artist {
+  font-size: 13px;
+  color: #cfd6e0;
+}
+.wmp-now-playing__requester {
+  font-size: 11px;
+  color: #8896a8;
+  margin-top: 4px;
+}
+
+/* ============================================================
+   Transport bar — WMP11 style: dark capsule with big glowing play
+   ============================================================ */
+.wmp-now-playing__transport {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+}
+.wmp-transport {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 18px;
+  background: linear-gradient(180deg, rgba(20, 28, 44, 0.85), rgba(5, 8, 17, 0.85));
+  border: 1px solid rgba(80, 130, 200, 0.3);
+  border-radius: 999px;
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #cfd6e0;
+  backdrop-filter: blur(8px);
+}
+/* Small round transport buttons (shuffle, repeat, stop, prev, next) */
+.wmp-transport__btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(80, 130, 200, 0.3);
+  background: linear-gradient(180deg, #2a3850, #0a1322);
+  color: #b0bccc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  position: relative;
+}
+.wmp-transport__btn:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3c4d6c, #131a28);
+  color: #fff;
+  border-color: rgba(120, 170, 240, 0.5);
+}
+.wmp-transport__btn:not(:disabled):active {
+  transform: scale(0.95);
+}
+.wmp-transport__btn:disabled {
+  opacity: 0.5;
+}
+.wmp-transport__btn--active {
+  background: radial-gradient(circle at 50% 30%, #ffd76a 0%, #f4a800 40%, #a46a00 100%);
+  color: #1a1000;
+  border-color: rgba(255, 200, 80, 0.6);
+}
+/* Big glowing play button — the iconic WMP11 element */
+.wmp-transport__btn--play {
+  width: 50px;
+  height: 50px;
+  border: 2px solid #6f9ddc;
+  background:
+    radial-gradient(circle at 50% 30%, #8ec0ff 0%, #3669ad 40%, #0b2247 100%);
+  color: #fff;
+  box-shadow:
+    0 0 16px rgba(80, 150, 240, 0.6),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.4);
+  margin: 0 6px;
+}
+.wmp-transport__btn--play:hover {
+  background:
+    radial-gradient(circle at 50% 30%, #a5d0ff 0%, #4a82c9 40%, #15326b 100%);
+  box-shadow:
+    0 0 24px rgba(120, 180, 255, 0.8),
+    inset 0 2px 4px rgba(255, 255, 255, 0.5),
+    inset 0 -3px 6px rgba(0, 0, 0, 0.4);
+}
+.wmp-transport__vote-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #c02818;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 9px;
+  border: 1px solid #fff;
+}
+.wmp-transport__volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 14px;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  margin-left: 6px;
+}
+.wmp-transport__volume-slider {
+  width: 90px;
+  accent-color: #6f9ddc;
+}
+
+.wmp-visualizer-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* ============================================================
+   Enhancements floating chat panel — dark theme
+   ============================================================ */
+.wmp-enhancements {
+  position: fixed;
+  width: 340px;
+  height: 360px;
+  background: linear-gradient(180deg, #131a28 0%, #060b16 100%);
+  border: 1px solid #1a3a6e;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  color: #cfd6e0;
+}
+.wmp-enhancements__title-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  background: linear-gradient(180deg, #2a3850 0%, #131a28 50%, #060b16 100%);
+  border-bottom: 1px solid #000;
+  color: #e6ecf5;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: move;
+  user-select: none;
+}
+.wmp-enhancements__close {
+  width: 22px;
+  height: 18px;
+  background: linear-gradient(180deg, #2a3850, #060b16);
+  color: #cfd6e0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  cursor: default;
+}
+.wmp-enhancements__close:hover {
+  background: linear-gradient(180deg, #d94438, #6a1808);
+  color: #fff;
+}
+.wmp-enhancements__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 8px;
+  min-height: 0;
+}
+.wmp-enhancements__messages {
+  flex: 1;
+  overflow-y: auto;
+  background: #050811;
+  border: 1px solid #1a3a6e;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: #cfd6e0;
+}
+.wmp-enhancements__empty {
+  color: #5a6678;
+  text-align: center;
+  padding: 20px 0;
+}
+.wmp-enhancements__message {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+}
+.wmp-enhancements__user {
+  font-weight: 700;
+  color: #6f9ddc;
+  white-space: nowrap;
+}
+.wmp-enhancements__text {
+  color: #cfd6e0;
+}
+.wmp-enhancements__input-row {
+  display: flex;
+  gap: 6px;
+}
+.wmp-enhancements__input {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 11px;
+  border: 1px solid #1a3a6e;
+  background: #050811;
+  color: #cfd6e0;
+  outline: none;
+}
+.wmp-enhancements__input:focus {
+  border-color: #2c5a9c;
+}
+.wmp-enhancements__send {
+  padding: 4px 14px;
+  background: linear-gradient(180deg, #2c5a9c, #0b2247);
+  border: 1px solid #1a3a6e;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  cursor: default;
+}
+.wmp-enhancements__send:hover {
+  background: linear-gradient(180deg, #3669ad, #163058);
+}

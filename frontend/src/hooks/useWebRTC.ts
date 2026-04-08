@@ -290,5 +290,5 @@ export function useWebRTC() {
     }
   }, []);
 
-  return { volume, setVolume, listening, analyserRef };
+  return { volume, setVolume, listening, analyserRef, audioContextRef: audioCtxRef };
 }
