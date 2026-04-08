@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type BuiltinThemeId = 'neon_groove' | 'electric_ember' | 'ultraviolet_dreamscape' | 'digital_cobalt' | 'cyber_industrial';
+export type BuiltinThemeId = 'neon_groove' | 'electric_ember' | 'ultraviolet_dreamscape' | 'digital_cobalt' | 'cyber_industrial' | 'wmp7';
 export type ThemeId = BuiltinThemeId | (string & {});
 
 export interface ThemeDefinition {
@@ -9,6 +9,8 @@ export interface ThemeDefinition {
   description: string;
   preview: { bg: string; primary: string; secondary: string };
   vars: Record<string, string>;
+  kind?: 'css' | 'page';
+  route?: string;
 }
 
 export const themes: ThemeDefinition[] = [
@@ -177,18 +179,42 @@ export const themes: ThemeDefinition[] = [
       '--scrollbar-thumb': '#48474B',
     },
   },
+  {
+    id: 'wmp7',
+    name: 'Windows 7 Media Player',
+    description: 'Aero glass, round transport buttons, live visualizer',
+    preview: { bg: '#1a4d8c', primary: '#f4a800', secondary: '#c3e0ff' },
+    vars: {},
+    kind: 'page',
+    route: '/wmp',
+  },
 ];
 
 interface ThemeState {
   currentTheme: ThemeId;
+  previousCssTheme: ThemeId;
   setTheme: (id: ThemeId) => void;
 }
 
-export const useThemeStore = create<ThemeState>((set) => ({
+export const useThemeStore = create<ThemeState>((set, get) => ({
   currentTheme: (localStorage.getItem('awks-theme') as ThemeId) || 'neon_groove',
+  previousCssTheme: (localStorage.getItem('awks-previous-css-theme') as ThemeId) || 'neon_groove',
   setTheme: (id) => {
+    const current = get().currentTheme;
+    const currentDef = themes.find((t) => t.id === current);
+    const nextDef = themes.find((t) => t.id === id);
+
+    // Before switching, if the outgoing theme is a CSS theme, remember it.
+    if (currentDef?.kind !== 'page') {
+      localStorage.setItem('awks-previous-css-theme', current);
+      set({ previousCssTheme: current });
+    }
+
     localStorage.setItem('awks-theme', id);
     set({ currentTheme: id });
+
+    // Apply or skip depending on kind
+    if (nextDef) applyTheme(nextDef);
   },
 }));
 
@@ -198,6 +224,9 @@ export function applyTheme(themeOrId: ThemeId | ThemeDefinition) {
       ? themes.find((t) => t.id === themeOrId)
       : themeOrId;
   if (!theme) return;
+
+  // Page themes don't touch CSS vars; the caller is responsible for navigation.
+  if (theme.kind === 'page') return;
 
   const root = document.documentElement;
   for (const [key, value] of Object.entries(theme.vars)) {

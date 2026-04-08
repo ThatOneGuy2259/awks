@@ -1,10 +1,9 @@
 import { memo } from 'react';
 import type { SearchResult } from '../../lib/api';
-import { api } from '../../lib/api';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { TrackTooltip } from './TrackTooltip';
 import { formatTime } from '../../lib/formatTime';
-import { toast } from '../../stores/toastStore';
+import { useRequestTrack } from '../../hooks/useRequestTrack';
 
 interface TrackCardProps {
   track: SearchResult;
@@ -13,21 +12,13 @@ interface TrackCardProps {
 }
 
 export const TrackCard = memo(function TrackCard({ track, featured, disabled }: TrackCardProps) {
-  const [requesting, setRequesting] = useState(false);
-  const [requested, setRequested] = useState(false);
+  const { request, requesting, lastRequestedId } = useRequestTrack();
+  const requested = lastRequestedId === track.video_id;
   const [showTooltip, setShowTooltip] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   const handleRequest = async () => {
-    setRequesting(true);
-    try {
-      await api.addToQueue(`https://www.youtube.com/watch?v=${track.video_id}`);
-      setRequested(true);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Failed to request');
-    } finally {
-      setRequesting(false);
-    }
+    await request(track.video_id);
   };
 
   const handleMouseEnter = useCallback(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, lazy, Suspense, type RefObject } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import { Sidebar } from './components/layout/Sidebar';
@@ -11,6 +11,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 const SearchRequestView = lazy(() => import('./pages/SearchRequestView').then(m => ({ default: m.SearchRequestView })));
 const AdminDashboardView = lazy(() => import('./pages/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
 const HistoryView = lazy(() => import('./pages/HistoryView').then(m => ({ default: m.HistoryView })));
+const WmpPage = lazy(() => import('./pages/wmp/WmpPage').then(m => ({ default: m.WmpPage })));
 import { useWebRTC } from './hooks/useWebRTC';
 import { useUIStore } from './stores/uiStore';
 import { setGetTokenFn, api } from './lib/api';
@@ -60,7 +61,49 @@ function AuthenticatedApp() {
 
 function AppContent() {
   useWebSocket();
-  const { volume, setVolume, listening, analyserRef } = useWebRTC();
+  const { volume, setVolume, listening, analyserRef, audioContextRef } = useWebRTC();
+
+  return (
+    <>
+      <ConnectionBanner />
+      <Routes>
+        <Route
+          path="/wmp"
+          element={
+            <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
+              <WmpPage
+                  analyserRef={analyserRef}
+                  audioContextRef={audioContextRef}
+                  volume={volume}
+                  setVolume={setVolume}
+                />
+            </Suspense>
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <ShellLayout
+              volume={volume}
+              setVolume={setVolume}
+              listening={listening}
+              analyserRef={analyserRef}
+            />
+          }
+        />
+      </Routes>
+    </>
+  );
+}
+
+interface ShellLayoutProps {
+  volume: number;
+  setVolume: (v: number) => void;
+  listening: boolean;
+  analyserRef: RefObject<AnalyserNode | null>;
+}
+
+function ShellLayout({ volume, setVolume, listening, analyserRef }: ShellLayoutProps) {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
 
   return (
@@ -68,7 +111,6 @@ function AppContent() {
       <BackgroundEffectCanvas analyserRef={analyserRef} />
       <TopBar />
       <Sidebar listening={listening} />
-      <ConnectionBanner />
 
       <main className={`pt-20 pb-32 min-h-screen relative z-[2] transition-[padding-left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-64'}`}>
         <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
