@@ -4,29 +4,31 @@ on:
   push:
     branches: [main]
 
+# Runs on the self-hosted runner installed on the home server (100.94.134.21).
+# The runner executes locally on the box, so no SSH hop or tunnel is needed.
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, awks-server]
+    concurrency:
+      group: awks-deploy
+      cancel-in-progress: false
     steps:
-      - name: Install cloudflared
+      - name: Pull latest main
         run: |
-          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
-          sudo dpkg -i cloudflared.deb
+          cd "$HOME/awks"
+          git fetch origin main
+          git reset --hard origin/main
 
-      - name: Setup SSH key
+      - name: Build frontend + backend
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          cat >> ~/.ssh/config << EOF
-          Host deploy-target
-            HostName ${{ secrets.DEPLOY_HOST }}
-            User box
-            IdentityFile ~/.ssh/deploy_key
-            StrictHostKeyChecking accept-new
-            ProxyCommand cloudflared access ssh --hostname %h
-          EOF
+          cd "$HOME/awks"
+          ./deploy.sh --rebuild --build-only
 
-      - name: Deploy
+      - name: Restart service
+        run: sudo systemctl restart awks
+
+      - name: Health check
         run: |
-          ssh deploy-target 'cd ~/Desktop/awks && git pull origin main && sudo systemctl stop awks && ./deploy.sh --rebuild --build-only && sudo systemctl start awks'
+          sleep 3
+          curl -fsS --retry 5 --retry-delay 2 http://localhost:8090/ >/dev/null
+          echo "Deploy OK"
