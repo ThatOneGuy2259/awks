@@ -24,7 +24,7 @@ interface FrameMsg {
   type: 'frame';
   bars: Float32Array; // length 128, each 0..1
   wave?: Float32Array; // length 128, each -1..1 (scope mode only)
-  mode?: 'bars' | 'oscilloscope';
+  mode?: 'bars' | 'oscilloscope' | 'radial';
   gain: number;
   mirrored: boolean;
   orientation: Orientation;
@@ -95,7 +95,7 @@ let height = 0;
 // Latest frame state (null until first 'frame'/'colors').
 let bars: Float32Array | null = null;
 let wave: Float32Array | null = null;
-let mode: 'bars' | 'oscilloscope' = 'bars';
+let mode: 'bars' | 'oscilloscope' | 'radial' = 'bars';
 let colors: Float32Array | null = null;
 let gain = 1;
 let mirrored = false;
@@ -235,16 +235,63 @@ function spawn(dtScale: number): void {
   const contentCenter = contentLeft + contentW / 2;
   const halfW = contentW / 2;
 
+  // Radial: emit particles from the ring outward (matches the canvas ring,
+  // which is centered in the bottom visualizer strip).
+  if (mode === 'radial') {
+    const col = colors;
+    // Radial uses a full-viewport centered canvas — emit from the screen center
+    // ring to match (not the bottom-strip baseline).
+    const cx = width / 2;
+    const cy = height / 2;
+    const maxR = Math.min(width, height) / 2 - Math.min(width, height) * 0.06;
+    const innerR = Math.max(14, maxR * 0.12);
+    const span = maxR - innerR;
+    const full = mirrored ? Math.PI : Math.PI * 2;
+    const anglePer = full / BAR_COUNT;
+    const top = -Math.PI / 2;
+    for (let i = 0; i < BAR_COUNT; i++) {
+      const value = bars[i];
+      if (value < 0.2) continue;
+      if (Math.random() > value * 0.3 * gain * dtScale * qualityScale) continue;
+      const pos = orientation === 'flipped' ? BAR_COUNT - 1 - i : i;
+      const r = innerR + value * span;
+      const speed = (0.4 + value * 2) * gain;
+      const size = (0.8 + value * 1.5) * Math.min(gain, 1.5);
+      const life = 0.5 + value * 0.5;
+      const emit = (angle: number) => {
+        if (count >= MAX_PARTICLES) return;
+        const ca = Math.cos(angle);
+        const sa = Math.sin(angle);
+        const idx = count++;
+        px[idx] = cx + ca * r + (Math.random() - 0.5) * 6;
+        py[idx] = cy + sa * r + (Math.random() - 0.5) * 6;
+        pvx[idx] = ca * speed + (Math.random() - 0.5) * 0.4;
+        pvy[idx] = sa * speed + (Math.random() - 0.5) * 0.4;
+        psize[idx] = size;
+        pr[idx] = col[i * 3];
+        pg[idx] = col[i * 3 + 1];
+        pb[idx] = col[i * 3 + 2];
+        plife[idx] = life;
+      };
+      emit(top + pos * anglePer);
+      if (mirrored) emit(top - pos * anglePer);
+    }
+    return;
+  }
+
   // Oscilloscope: emit particles along the waveform line itself (the bar-top
   // geometry below is meaningless when the visual is a single wave).
   if (mode === 'oscilloscope') {
     if (!wave) return;
-    const SCOPE_AMP = 95; // matches drawScope() amplitude in useVisualizer
+    // Match drawScope()'s raised center (buffer y=92 vs bars baseline 180) and
+    // amplitude, scaled from buffer px to screen px per breakpoint.
+    const scopeCenter = vizBaseline - (isXl ? 88 : 69);
+    const SCOPE_AMP = isXl ? 70 : 55;
     for (let i = 0; i < BAR_COUNT; i++) {
       if (Math.random() > 0.06 * gain * dtScale * qualityScale) continue;
       if (count >= MAX_PARTICLES) return;
       const x = contentLeft + (i / (BAR_COUNT - 1)) * contentW;
-      const y = vizBaseline + wave[i] * SCOPE_AMP;
+      const y = scopeCenter + wave[i] * SCOPE_AMP;
       const idx = count++;
       px[idx] = x + (Math.random() - 0.5) * 6;
       py[idx] = y + (Math.random() - 0.5) * 4;

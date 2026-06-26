@@ -1,8 +1,12 @@
 import { create } from 'zustand';
 
 export type VisualizerOrientation = 'normal' | 'flipped';
-export type VisualizerMode = 'bars' | 'oscilloscope';
+export type VisualizerMode = 'bars' | 'oscilloscope' | 'radial';
 export type BackgroundEffect = 'none' | 'color-pulse' | 'gradient-wave' | 'ambient-blobs' | 'particles';
+
+// Single source of truth for valid modes — used to validate imported presets so
+// new modes aren't silently dropped to 'bars'.
+export const VISUALIZER_MODES: VisualizerMode[] = ['bars', 'oscilloscope', 'radial'];
 
 export const EQ_BANDS = [
   { label: 'Sub', range: '0-60Hz', frequency: 32, type: 'lowshelf' as BiquadFilterType },
@@ -334,7 +338,7 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
       const preset: VizPreset = {
         id: `preset_${Date.now()}`,
         name: p.name,
-        mode: p.mode === 'oscilloscope' ? 'oscilloscope' : 'bars',
+        mode: VISUALIZER_MODES.includes(p.mode) ? p.mode : 'bars',
         vizGains: [...p.vizGains],
         mirrored: !!p.mirrored,
         orientation: p.orientation === 'flipped' ? 'flipped' : 'normal',
