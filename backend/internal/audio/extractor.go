@@ -65,10 +65,13 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 			e.onStatusChange()
 		}
 
-		// Run yt-dlp to download best available audio
+		// Run yt-dlp to download best available audio. Fall back to a combined
+		// stream (e.g. format 18) when YouTube's anti-bot challenge hides the
+		// audio-only formats — the ffmpeg repack below re-encodes to opus and
+		// strips video either way.
 		tmpBase := filepath.Join(e.cacheDir, queueID+"-tmp")
 		cmd := exec.Command(e.ytdlpPath,
-			"-f", "bestaudio",
+			"-f", "bestaudio/best",
 			"--no-playlist",
 			"--no-warnings",
 			"-o", tmpBase+".%(ext)s",
