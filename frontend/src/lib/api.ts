@@ -1,5 +1,15 @@
 const API_URL = import.meta.env.VITE_API_URL || '';
 
+/** Coerce a value that may be a Go sql.NullString ({String, Valid}) into a plain string. */
+function nullStr(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object' && 'String' in v) {
+    const n = v as { String?: unknown; Valid?: unknown };
+    return n.Valid ? String(n.String ?? '') : '';
+  }
+  return '';
+}
+
 let getTokenFn: (() => Promise<string | null>) | null = null;
 
 export function setGetTokenFn(fn: () => Promise<string | null>) {
@@ -35,7 +45,9 @@ export const api = {
   retractSkipVote: (id: string) => request<void>(`/api/queue/${id}/skip-vote`, { method: 'DELETE' }),
   getPlayback: () => request<PlaybackState>('/api/playback'),
   getHistory: (limit = 20, offset = 0) =>
-    request<HistoryEntry[]>(`/api/history?limit=${limit}&offset=${offset}`),
+    request<HistoryEntry[]>(`/api/history?limit=${limit}&offset=${offset}`).then((rows) =>
+      (rows || []).map((r) => ({ ...r, artist: nullStr(r.artist) }))
+    ),
   getListeners: () => request<ListenersResponse>('/api/listeners'),
   search: (q: string) => request<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`),
   suggest: (q: string, signal?: AbortSignal) =>

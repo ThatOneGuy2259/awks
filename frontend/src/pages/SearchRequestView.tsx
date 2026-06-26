@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { SearchInput } from '../components/search/SearchInput';
 import { TrackCard } from '../components/search/TrackCard';
-import { api, type SearchResult } from '../lib/api';
+import { EmptyState } from '../components/EmptyState';
+import { api, type SearchResult, type HistoryEntry } from '../lib/api';
 import { useQueueStore } from '../stores/queueStore';
 import { useUserStore } from '../stores/userStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useRequestTrack } from '../hooks/useRequestTrack';
+import { formatTime } from '../lib/formatTime';
 
 const fallbackTags = ['Phonk', 'Midnight Lo-fi', 'Cyberpunk 2077', 'Hyperpop', 'Synthwave', 'Chillhop'];
 
@@ -14,6 +17,8 @@ export function SearchRequestView() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [trendingTags, setTrendingTags] = useState<string[]>(fallbackTags);
+  const [recent, setRecent] = useState<HistoryEntry[]>([]);
+  const { request, requesting, lastRequestedId } = useRequestTrack();
 
   useEffect(() => {
     api.trendingTags()
@@ -25,6 +30,18 @@ export function SearchRequestView() {
       .catch(() => {
         // Keep fallback tags
       });
+
+    api.getHistory(20, 0)
+      .then((data) => {
+        const seen = new Set<string>();
+        const unique = (data || []).filter((e) => {
+          if (seen.has(e.video_id)) return false;
+          seen.add(e.video_id);
+          return true;
+        });
+        setRecent(unique.slice(0, 6));
+      })
+      .catch(() => {});
   }, []);
 
   const tracks = useQueueStore((s) => s.tracks);
@@ -95,6 +112,48 @@ export function SearchRequestView() {
         </div>
       </div>
 
+      {/* Pre-search: jump back into recently played */}
+      {!loading && !searched && recent.length > 0 && (
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-4 font-label">
+            Jump back in
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {recent.map((entry) => {
+              const requested = lastRequestedId === entry.video_id;
+              return (
+                <button
+                  key={entry.id}
+                  onClick={() => request(entry.video_id)}
+                  disabled={requesting || requested || atLimit}
+                  title={requested ? 'Added to queue' : 'Play again'}
+                  className="group flex items-center gap-3 p-2.5 rounded-xl bg-surface-container-high/60 border border-outline-variant/10 hover:border-primary/30 hover:bg-surface-container-high transition-all text-left disabled:opacity-50"
+                >
+                  <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container">
+                    <img
+                      src={`https://img.youtube.com/vi/${entry.video_id}/default.jpg`}
+                      alt={entry.title}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-on-surface truncate" title={entry.title}>{entry.title}</p>
+                    <p className="text-xs text-on-surface-variant truncate">
+                      {entry.artist || entry.requester_name}
+                      {entry.duration_sec > 0 && <span className="ml-2 opacity-60">{formatTime(entry.duration_sec)}</span>}
+                    </p>
+                  </div>
+                  <span className="material-symbols-outlined text-secondary flex-shrink-0 mr-1">
+                    {requested ? 'check' : 'replay'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Search Results */}
       {loading && (
         <div className="text-center py-12">
@@ -103,10 +162,11 @@ export function SearchRequestView() {
       )}
 
       {!loading && searched && results.length === 0 && (
-        <div className="text-center py-12 text-on-surface-variant">
-          <span className="material-symbols-outlined text-4xl block mb-2">search_off</span>
-          <p>No results found. Try a different search.</p>
-        </div>
+        <EmptyState
+          icon="search_off"
+          title="No results found"
+          subtitle="Try a different search term, or paste a YouTube URL."
+        />
       )}
 
       {!loading && results.length > 0 && (

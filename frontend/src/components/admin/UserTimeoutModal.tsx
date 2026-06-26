@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../lib/api';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface UserTimeoutModalProps {
   userId: string;
@@ -11,6 +12,7 @@ export function UserTimeoutModal({ userId, username, onClose }: UserTimeoutModal
   const [minutes, setMinutes] = useState(10);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
+  useEscapeClose(onClose);
 
   const handleTimeout = async () => {
     setLoading(true);
@@ -26,7 +28,7 @@ export function UserTimeoutModal({ userId, username, onClose }: UserTimeoutModal
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="glass-card rounded-2xl p-8 w-full max-w-md border border-outline-variant/10" onClick={(e) => e.stopPropagation()}>
+      <div className="glass-card rounded-2xl p-8 w-full max-w-md border border-outline-variant/10" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <h3 className="text-xl font-bold font-headline mb-6">Timeout @{username}</h3>
 
         <div className="space-y-4">

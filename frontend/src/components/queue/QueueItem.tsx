@@ -36,7 +36,7 @@ export const QueueItem = memo(function QueueItem({ track, index }: QueueItemProp
         />
       </div>
       <div className="flex-1 min-w-0">
-        <h4 className="font-bold text-on-surface truncate group-hover:text-primary transition-colors">
+        <h4 className="font-bold text-on-surface truncate group-hover:text-primary transition-colors" title={track.title}>
           {track.title}
         </h4>
         <p className="text-on-surface-variant text-sm truncate">

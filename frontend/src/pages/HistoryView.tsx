@@ -2,13 +2,61 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import type { HistoryEntry } from '../lib/api';
 import { useUserStore } from '../stores/userStore';
+import { useRequestTrack } from '../hooks/useRequestTrack';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { EmptyState } from '../components/EmptyState';
+
+function formatTime(sec: number) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatRelative(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString();
+}
+
+/** Day-bucket label for grouping (Today / Yesterday / weekday / date). */
+function groupLabel(iso: string) {
+  const d = new Date(iso);
+  const now = new Date();
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(d)) / 86400000);
+  if (dayDiff <= 0) return 'Today';
+  if (dayDiff === 1) return 'Yesterday';
+  if (dayDiff < 7) return d.toLocaleDateString(undefined, { weekday: 'long' });
+  return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+}
+
+function groupByDay(entries: HistoryEntry[]) {
+  const groups: { label: string; items: HistoryEntry[] }[] = [];
+  for (const entry of entries) {
+    const label = groupLabel(entry.played_at);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(entry);
+    else groups.push({ label, items: [entry] });
+  }
+  return groups;
+}
 
 export function HistoryView() {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const isAdmin = useUserStore((s) => s.role === 'admin');
+  const { request, requesting, lastRequestedId } = useRequestTrack();
 
   const fetchHistory = useCallback(() => {
     setLoading(true);
@@ -49,7 +97,6 @@ export function HistoryView() {
   };
 
   const handleClearAll = async () => {
-    if (!confirm('Clear all history? This cannot be undone.')) return;
     try {
       await api.clearHistory();
       setEntries([]);
@@ -58,26 +105,6 @@ export function HistoryView() {
     }
   };
 
-  function formatTime(sec: number) {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  }
-
-  function formatDate(iso: string) {
-    const d = new Date(iso);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return d.toLocaleDateString();
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -85,6 +112,8 @@ export function HistoryView() {
       </div>
     );
   }
+
+  const groups = groupByDay(entries);
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
@@ -95,7 +124,7 @@ export function HistoryView() {
         </div>
         {isAdmin && entries.length > 0 && (
           <button
-            onClick={handleClearAll}
+            onClick={() => setShowClearConfirm(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-full border border-red-500/20 text-red-400 text-xs font-bold hover:bg-red-500/10 transition-colors"
           >
             <span className="material-symbols-outlined text-sm">delete_sweep</span>
@@ -105,51 +134,68 @@ export function HistoryView() {
       </div>
 
       {entries.length === 0 ? (
-        <div className="text-center py-16 text-on-surface-variant">
-          <span className="material-symbols-outlined text-5xl mb-4 block">history</span>
-          <p className="text-lg font-medium">No tracks played yet</p>
-        </div>
+        <EmptyState icon="history" title="No tracks played yet" subtitle="Songs you and others play will show up here." />
       ) : (
-        <div className="space-y-2">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors group"
-            >
-              <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container">
-                <img
-                  src={`https://img.youtube.com/vi/${entry.video_id}/default.jpg`}
-                  alt={entry.title}
-                  className="w-full h-full object-cover"
-                  loading="lazy"
-                />
-                {entry.skipped && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                    <span className="material-symbols-outlined text-sm text-orange-400">skip_next</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-on-surface truncate">{entry.title}</p>
-                <p className="text-xs text-on-surface-variant truncate">
-                  {entry.artist ? `${entry.artist} \u00b7 ` : ''}{entry.requester_name}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4 flex-shrink-0">
-                <span className="text-xs text-on-surface-variant tabular-nums">{formatTime(entry.duration_sec)}</span>
-                <span className="text-xs text-on-surface-variant/60 w-16 text-right">{formatDate(entry.played_at)}</span>
-                {isAdmin && (
-                  <button
-                    onClick={() => handleDelete(entry.id)}
-                    className="p-1 text-on-surface-variant/40 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                    title="Remove from history"
+        <div className="space-y-8">
+          {groups.map((group) => (
+            <div key={group.label} className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant/70 px-3">
+                {group.label}
+              </h3>
+              {group.items.map((entry) => {
+                const requested = lastRequestedId === entry.video_id;
+                return (
+                  <div
+                    key={entry.id}
+                    className="flex items-center gap-4 p-3 rounded-xl hover:bg-white/5 transition-colors group"
                   >
-                    <span className="material-symbols-outlined text-sm">close</span>
-                  </button>
-                )}
-              </div>
+                    <div className="relative w-12 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container">
+                      <img
+                        src={`https://img.youtube.com/vi/${entry.video_id}/default.jpg`}
+                        alt={entry.title}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                      {entry.skipped && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                          <span className="material-symbols-outlined text-sm text-orange-400">skip_next</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-on-surface truncate" title={entry.title}>{entry.title}</p>
+                      <p className="text-xs text-on-surface-variant truncate">
+                        {entry.artist ? `${entry.artist} · ` : ''}{entry.requester_name}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className="text-xs text-on-surface-variant tabular-nums hidden sm:inline">{formatTime(entry.duration_sec)}</span>
+                      <span className="text-xs text-on-surface-variant/60 w-16 text-right hidden sm:inline">{formatRelative(entry.played_at)}</span>
+                      <button
+                        onClick={() => request(entry.video_id)}
+                        disabled={requesting || requested}
+                        title={requested ? 'Added to queue' : 'Play again'}
+                        aria-label={requested ? 'Added to queue' : 'Request this track again'}
+                        className="p-2 rounded-full text-on-surface-variant hover:text-secondary hover:bg-secondary/10 transition-colors disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 disabled:sm:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-base">{requested ? 'check' : 'replay'}</span>
+                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleDelete(entry.id)}
+                          className="p-1 text-on-surface-variant/40 hover:text-red-400 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
+                          title="Remove from history"
+                          aria-label="Remove from history"
+                        >
+                          <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ))}
 
@@ -163,6 +209,17 @@ export function HistoryView() {
             </div>
           )}
         </div>
+      )}
+
+      {showClearConfirm && (
+        <ConfirmModal
+          title="Clear all history?"
+          message="This permanently removes every played track from the history. This cannot be undone."
+          confirmLabel="Clear All"
+          danger
+          onConfirm={handleClearAll}
+          onClose={() => setShowClearConfirm(false)}
+        />
       )}
     </div>
   );

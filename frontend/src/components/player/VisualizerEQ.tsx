@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useVisualizerStore, EQ_BANDS, type VisualizerOrientation } from '../../stores/visualizerStore';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface VisualizerEQProps {
   onClose: () => void;
@@ -25,7 +26,7 @@ function BandSliders({ gains, onChange }: BandSlidersProps) {
     <div className="flex items-end justify-between gap-1">
       {EQ_BANDS.map((band, i) => (
         <div key={band.label} className="flex flex-col items-center gap-0.5 flex-1">
-          <span className="text-[9px] text-on-surface-variant font-mono">{gains[i].toFixed(1)}</span>
+          <span className="text-[10px] text-on-surface-variant font-mono">{gains[i].toFixed(1)}</span>
           <div className="h-16 lg:h-20 flex items-center justify-center">
             <input
               type="range"
@@ -39,7 +40,7 @@ function BandSliders({ gains, onChange }: BandSlidersProps) {
               style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
             />
           </div>
-          <span className="text-[9px] font-bold text-on-surface-variant">{band.label}</span>
+          <span className="text-[10px] font-bold text-on-surface-variant">{band.label}</span>
         </div>
       ))}
     </div>
@@ -86,6 +87,7 @@ export function VisualizerEQ({ onClose }: VisualizerEQProps) {
   const [importValue, setImportValue] = useState('');
   const [importError, setImportError] = useState('');
   const { copiedKey, copy } = useClipboard();
+  useEscapeClose(onClose);
 
   const toggleImport = (key: string) => {
     setImportTarget(importTarget === key ? null : key);

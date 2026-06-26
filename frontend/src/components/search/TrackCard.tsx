@@ -105,8 +105,8 @@ export const TrackCard = memo(function TrackCard({ track, featured, disabled }: 
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <h4 className="text-sm font-bold text-on-surface truncate">{track.title}</h4>
-        <p className="text-xs text-on-surface-variant truncate">{track.artist}</p>
+        <h4 className="text-sm font-bold text-on-surface truncate" title={track.title}>{track.title}</h4>
+        <p className="text-xs text-on-surface-variant truncate" title={track.artist}>{track.artist}</p>
       </div>
       <button
         onClick={handleRequest}
