@@ -559,6 +559,17 @@ function drawConstellations(ctx: WebGLRenderingContext): void {
   ctx.useProgram(progLine);
   ctx.bindBuffer(ctx.ARRAY_BUFFER, vboLine);
   ctx.bufferSubData(ctx.ARRAY_BUFFER, 0, lineData.subarray(0, li));
+
+  // Reset vertex-attrib array state left enabled by the point pass. Strict GL
+  // drivers (Firefox, real-GPU ANGLE/Chrome) reject a draw if ANY enabled array —
+  // even one this program ignores — is bound to a buffer too small for the vertex
+  // count. The leftover point a_color array points at the smaller particle buffer,
+  // so the LINES draw (more vertices) gets rejected. SwiftShader (Playwright) is
+  // lenient, which is why it only broke in real browsers. Clear, then enable ours.
+  ctx.disableVertexAttribArray(locPos);
+  if (locSize >= 0) ctx.disableVertexAttribArray(locSize);
+  if (locColor >= 0) ctx.disableVertexAttribArray(locColor);
+
   const stride = FLOATS_PER_LINE_VERT * 4;
   if (locLinePos >= 0) {
     ctx.enableVertexAttribArray(locLinePos);
