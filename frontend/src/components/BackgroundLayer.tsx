@@ -41,6 +41,10 @@ function supportsParticleWorker(): boolean {
  */
 export function BackgroundLayer({ analyserRef }: BackgroundLayerProps) {
   const effect = useVisualizerStore((s) => s.backgroundEffect);
+  const reduceVisuals = useVisualizerStore((s) => s.reduceVisuals);
+
+  // Low-power mode: skip the background effect layer entirely.
+  if (reduceVisuals || effect === 'none') return null;
 
   if (effect === 'particles' && supportsParticleWorker()) {
     return <ParticleGLBackground analyserRef={analyserRef} />;

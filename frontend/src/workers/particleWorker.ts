@@ -23,6 +23,8 @@ interface ColorsMsg {
 interface FrameMsg {
   type: 'frame';
   bars: Float32Array; // length 128, each 0..1
+  wave?: Float32Array; // length 128, each -1..1 (scope mode only)
+  mode?: 'bars' | 'oscilloscope';
   gain: number;
   mirrored: boolean;
   orientation: Orientation;
@@ -92,11 +94,18 @@ let height = 0;
 
 // Latest frame state (null until first 'frame'/'colors').
 let bars: Float32Array | null = null;
+let wave: Float32Array | null = null;
+let mode: 'bars' | 'oscilloscope' = 'bars';
 let colors: Float32Array | null = null;
 let gain = 1;
 let mirrored = false;
 let orientation: Orientation = 'normal';
 let sidebarOpen = false;
+
+// Adaptive quality (#95): scales spawn rate + particle cap down when render time
+// climbs (weak GPU / busy device) and recovers when there's headroom. Driven by
+// the worker's own measured frame time, so it's display-refresh independent.
+let qualityScale = 1;
 
 // Flat particle pool. `count` is the number of live particles.
 const px = new Float32Array(MAX_PARTICLES);
@@ -226,12 +235,36 @@ function spawn(dtScale: number): void {
   const contentCenter = contentLeft + contentW / 2;
   const halfW = contentW / 2;
 
+  // Oscilloscope: emit particles along the waveform line itself (the bar-top
+  // geometry below is meaningless when the visual is a single wave).
+  if (mode === 'oscilloscope') {
+    if (!wave) return;
+    const SCOPE_AMP = 95; // matches drawScope() amplitude in useVisualizer
+    for (let i = 0; i < BAR_COUNT; i++) {
+      if (Math.random() > 0.06 * gain * dtScale * qualityScale) continue;
+      if (count >= MAX_PARTICLES) return;
+      const x = contentLeft + (i / (BAR_COUNT - 1)) * contentW;
+      const y = vizBaseline + wave[i] * SCOPE_AMP;
+      const idx = count++;
+      px[idx] = x + (Math.random() - 0.5) * 6;
+      py[idx] = y + (Math.random() - 0.5) * 4;
+      pvx[idx] = (Math.random() - 0.5) * 0.8;
+      pvy[idx] = -(0.4 + Math.random() * 1.2) * gain;
+      psize[idx] = (0.8 + Math.random() * 1.2) * Math.min(gain, 1.5);
+      pr[idx] = colors[i * 3];
+      pg[idx] = colors[i * 3 + 1];
+      pb[idx] = colors[i * 3 + 2];
+      plife[idx] = 0.5 + Math.random() * 0.4;
+    }
+    return;
+  }
+
   for (let i = 0; i < BAR_COUNT; i++) {
     const value = bars[i];
     if (value < 0.2) continue;
     // Spawn probability scales with dtScale so the spawn *rate per second* stays
     // constant regardless of frame rate (more frames -> lower per-frame chance).
-    if (Math.random() > value * 0.3 * gain * dtScale) continue;
+    if (Math.random() > value * 0.3 * gain * dtScale * qualityScale) continue;
 
     const barHeight = value * vizMaxBarHeight;
     const spawnY = vizBaseline - barHeight;
@@ -316,7 +349,7 @@ function renderFrame(dtScale: number): void {
 
   // Cap stored particle count for next frame (excess already drawn this frame,
   // matching the 2D version which caps after drawing).
-  const maxParticles = Math.min(MAX_PARTICLES, Math.floor(4000 * Math.max(gain, 1)));
+  const maxParticles = Math.min(MAX_PARTICLES, Math.floor(4000 * Math.max(gain, 1) * qualityScale));
   if (count > maxParticles) count = maxParticles;
 
   const drawCount = write;
@@ -374,11 +407,19 @@ function startLoop(): void {
     if (statWindowStart === 0) {
       statWindowStart = now;
     } else if (now - statWindowStart >= 500) {
+      const avgMs = statRenderMs / statFrames;
+      // Throttle down when frames get expensive; recover when there's slack.
+      if (avgMs > 11 && qualityScale > 0.4) {
+        qualityScale = Math.max(0.4, qualityScale - 0.15);
+      } else if (avgMs < 6 && qualityScale < 1) {
+        qualityScale = Math.min(1, qualityScale + 0.08);
+      }
       post({
         type: 'stats',
         fps: Math.round((statFrames * 1000) / (now - statWindowStart)),
-        frameMs: statRenderMs / statFrames,
+        frameMs: avgMs,
         count,
+        quality: qualityScale,
       });
       statFrames = 0;
       statRenderMs = 0;
@@ -421,6 +462,8 @@ self.onmessage = (event: MessageEvent<IncomingMsg>) => {
     case 'frame':
       // Store latest state only — the rAF loop renders from it.
       bars = msg.bars;
+      if (msg.wave) wave = msg.wave;
+      mode = msg.mode ?? 'bars';
       gain = msg.gain;
       mirrored = msg.mirrored;
       orientation = msg.orientation;

@@ -2,7 +2,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { useVisualizerStore } from '../stores/visualizerStore';
 import { useUIStore } from '../stores/uiStore';
 import { usePerfStore } from '../stores/perfStore';
-import { barHeights, barColors } from '../hooks/useVisualizer';
+import { barHeights, barColors, waveform } from '../hooks/useVisualizer';
 
 interface ParticleGLBackgroundProps {
   // Particles drive off the shared barHeights/barColors, not the analyser, but we
@@ -71,9 +71,9 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
 
     // Live perf metrics from the worker feed the Performance HUD.
     worker.onmessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; fps?: number; frameMs?: number; count?: number };
+      const d = e.data as { type?: string; fps?: number; frameMs?: number; count?: number; quality?: number };
       if (d && d.type === 'stats') {
-        usePerfStore.getState().setWorkerStats({ fps: d.fps ?? 0, frameMs: d.frameMs ?? 0, count: d.count ?? 0 });
+        usePerfStore.getState().setWorkerStats({ fps: d.fps ?? 0, frameMs: d.frameMs ?? 0, count: d.count ?? 0, quality: d.quality ?? 1 });
       }
     };
 
@@ -106,12 +106,21 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
 
       const bars = new Float32Array(BAR_COUNT);
       bars.set(barHeights);
-      const { mirrored, orientation } = useVisualizerStore.getState();
+      const { mirrored, orientation, visualizerMode } = useVisualizerStore.getState();
       const sidebarOpen = window.innerWidth > 1024 && !useUIStore.getState().sidebarCollapsed;
+      const transfer: Transferable[] = [bars.buffer];
+      let wave: Float32Array | undefined;
+      if (visualizerMode === 'oscilloscope') {
+        wave = new Float32Array(BAR_COUNT);
+        wave.set(waveform);
+        transfer.push(wave.buffer);
+      }
       worker.postMessage(
         {
           type: 'frame',
           bars,
+          wave,
+          mode: visualizerMode,
           gain: intensityRef.current,
           mirrored,
           orientation,
@@ -119,7 +128,7 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
           width: window.innerWidth,
           height: window.innerHeight,
         },
-        [bars.buffer],
+        transfer,
       );
     };
     rafId = requestAnimationFrame(loop);

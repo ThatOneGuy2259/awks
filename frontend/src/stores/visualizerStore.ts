@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 export type VisualizerOrientation = 'normal' | 'flipped';
+export type VisualizerMode = 'bars' | 'oscilloscope';
 export type BackgroundEffect = 'none' | 'color-pulse' | 'gradient-wave' | 'ambient-blobs' | 'particles';
 
 export const EQ_BANDS = [
@@ -19,6 +20,21 @@ export const BAND_COUNT = EQ_BANDS.length;
 /** Convert slider value (0-2) to dB gain (-12 to +12). 1.0 = 0dB (flat). */
 export function sliderToDb(value: number): number {
   return (value - 1.0) * 12;
+}
+
+/** A saved snapshot of the whole visual look — shareable via export string. */
+export interface VizPreset {
+  id: string;
+  name: string;
+  mode: VisualizerMode;
+  vizGains: number[];
+  mirrored: boolean;
+  orientation: VisualizerOrientation;
+  backgroundEffect: BackgroundEffect;
+  backgroundIntensity: number;
+  beatReactivity: number;
+  trails: boolean;
+  hueDrift: boolean;
 }
 
 interface VisualizerState {
@@ -42,18 +58,51 @@ interface VisualizerState {
   setMirrored: (v: boolean) => void;
   setOrientation: (v: VisualizerOrientation) => void;
 
+  // Visualizer mode (what the spectrum canvas draws)
+  visualizerMode: VisualizerMode;
+  setVisualizerMode: (v: VisualizerMode) => void;
+
+  // Reactivity / motion
+  beatReactivity: number; // 0..1 — scales the beat-pulse effect
+  trails: boolean;        // motion-blur ghost trails
+  hueDrift: boolean;      // slow color rotation even on steady audio
+  setBeatReactivity: (v: number) => void;
+  setTrails: (v: boolean) => void;
+  setHueDrift: (v: boolean) => void;
+
   // Background effect
   backgroundEffect: BackgroundEffect;
-  backgroundIntensity: number; // 0.0 to 1.0, default 0.7
+  backgroundIntensity: number; // 0.0 to 2.0, default 1.0
   setBackgroundEffect: (v: BackgroundEffect) => void;
   setBackgroundIntensity: (v: number) => void;
+
+  // Mini visualizer in the player bar
+  miniViz: boolean;
+  setMiniViz: (v: boolean) => void;
+
+  // Accessibility / performance
+  reduceVisuals: boolean; // honor low-power / reduced-motion: calmer, cheaper
+  setReduceVisuals: (v: boolean) => void;
 
   // Performance HUD overlay (FPS / particle stats)
   perfHud: boolean;
   setPerfHud: (v: boolean) => void;
+
+  // Visualizer Studio panel open state (persisted so it stays put across refresh)
+  studioOpen: boolean;
+  setStudioOpen: (v: boolean) => void;
+
+  // Presets
+  presets: VizPreset[];
+  savePreset: (name: string) => void;
+  applyPreset: (id: string) => void;
+  deletePreset: (id: string) => void;
+  exportPreset: (id: string) => string;
+  importPreset: (encoded: string) => boolean;
 }
 
 const STORAGE_KEY = 'awks-visualizer';
+const PRESETS_KEY = 'awks-viz-presets';
 const DEFAULT_GAINS = Array(BAND_COUNT).fill(1.0) as number[];
 
 interface PersistedState {
@@ -61,9 +110,16 @@ interface PersistedState {
   vizGains?: number[];
   mirrored?: boolean;
   orientation?: VisualizerOrientation;
+  visualizerMode?: VisualizerMode;
+  beatReactivity?: number;
+  trails?: boolean;
+  hueDrift?: boolean;
   backgroundEffect?: BackgroundEffect;
   backgroundIntensity?: number;
+  miniViz?: boolean;
+  reduceVisuals?: boolean;
   perfHud?: boolean;
+  studioOpen?: boolean;
   // legacy field
   bandGains?: number[];
 }
@@ -78,15 +134,49 @@ function loadState(): PersistedState {
   }
 }
 
-function persistAll(state: { audioGains: number[]; vizGains: number[]; mirrored: boolean; orientation: VisualizerOrientation; backgroundEffect: BackgroundEffect; backgroundIntensity: number; perfHud: boolean }) {
+function loadPresets(): VizPreset[] {
+  try {
+    const raw = localStorage.getItem(PRESETS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePresets(presets: VizPreset[]) {
+  try {
+    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
+  } catch {}
+}
+
+type Persisted = Omit<PersistedState, 'bandGains'>;
+
+function persistAll(state: Persisted) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {}
 }
 
-function getPersistedSnapshot(get: () => VisualizerState) {
-  const { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity, perfHud } = get();
-  return { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity, perfHud };
+function getPersistedSnapshot(get: () => VisualizerState): Persisted {
+  const s = get();
+  return {
+    audioGains: s.audioGains,
+    vizGains: s.vizGains,
+    mirrored: s.mirrored,
+    orientation: s.orientation,
+    visualizerMode: s.visualizerMode,
+    beatReactivity: s.beatReactivity,
+    trails: s.trails,
+    hueDrift: s.hueDrift,
+    backgroundEffect: s.backgroundEffect,
+    backgroundIntensity: s.backgroundIntensity,
+    miniViz: s.miniViz,
+    reduceVisuals: s.reduceVisuals,
+    perfHud: s.perfHud,
+    studioOpen: s.studioOpen,
+  };
 }
 
 const saved = loadState();
@@ -104,9 +194,17 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
   vizGains: initialViz,
   mirrored: saved.mirrored ?? true,
   orientation: saved.orientation ?? 'normal',
+  visualizerMode: saved.visualizerMode ?? 'bars',
+  beatReactivity: typeof saved.beatReactivity === 'number' ? saved.beatReactivity : 1.0,
+  trails: saved.trails ?? false,
+  hueDrift: saved.hueDrift ?? false,
   backgroundEffect: saved.backgroundEffect ?? 'none',
   backgroundIntensity: saved.backgroundIntensity ?? 1.0,
+  miniViz: saved.miniViz ?? true,
+  reduceVisuals: saved.reduceVisuals ?? false,
   perfHud: saved.perfHud ?? false,
+  studioOpen: saved.studioOpen ?? false,
+  presets: loadPresets(),
 
   setAudioGain: (band, gain) => {
     const audioGains = [...get().audioGains];
@@ -164,7 +262,92 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
 
   setMirrored: (v) => { set({ mirrored: v }); persistAll({ ...getPersistedSnapshot(get), mirrored: v }); },
   setOrientation: (v) => { set({ orientation: v }); persistAll({ ...getPersistedSnapshot(get), orientation: v }); },
+  setVisualizerMode: (v) => { set({ visualizerMode: v }); persistAll({ ...getPersistedSnapshot(get), visualizerMode: v }); },
+  setBeatReactivity: (v) => { set({ beatReactivity: v }); persistAll({ ...getPersistedSnapshot(get), beatReactivity: v }); },
+  setTrails: (v) => { set({ trails: v }); persistAll({ ...getPersistedSnapshot(get), trails: v }); },
+  setHueDrift: (v) => { set({ hueDrift: v }); persistAll({ ...getPersistedSnapshot(get), hueDrift: v }); },
   setBackgroundEffect: (v) => { set({ backgroundEffect: v }); persistAll({ ...getPersistedSnapshot(get), backgroundEffect: v }); },
   setBackgroundIntensity: (v) => { set({ backgroundIntensity: v }); persistAll({ ...getPersistedSnapshot(get), backgroundIntensity: v }); },
+  setMiniViz: (v) => { set({ miniViz: v }); persistAll({ ...getPersistedSnapshot(get), miniViz: v }); },
+  setReduceVisuals: (v) => { set({ reduceVisuals: v }); persistAll({ ...getPersistedSnapshot(get), reduceVisuals: v }); },
   setPerfHud: (v) => { set({ perfHud: v }); persistAll({ ...getPersistedSnapshot(get), perfHud: v }); },
+  setStudioOpen: (v) => { set({ studioOpen: v }); persistAll({ ...getPersistedSnapshot(get), studioOpen: v }); },
+
+  savePreset: (name) => {
+    const s = get();
+    const preset: VizPreset = {
+      id: `preset_${Date.now()}`,
+      name: name.trim() || 'Preset',
+      mode: s.visualizerMode,
+      vizGains: [...s.vizGains],
+      mirrored: s.mirrored,
+      orientation: s.orientation,
+      backgroundEffect: s.backgroundEffect,
+      backgroundIntensity: s.backgroundIntensity,
+      beatReactivity: s.beatReactivity,
+      trails: s.trails,
+      hueDrift: s.hueDrift,
+    };
+    const presets = [...get().presets, preset];
+    set({ presets });
+    savePresets(presets);
+  },
+
+  applyPreset: (id) => {
+    const preset = get().presets.find((p) => p.id === id);
+    if (!preset) return;
+    const patch = {
+      visualizerMode: preset.mode,
+      vizGains: validateGains(preset.vizGains) ? [...preset.vizGains] : get().vizGains,
+      mirrored: preset.mirrored,
+      orientation: preset.orientation,
+      backgroundEffect: preset.backgroundEffect,
+      backgroundIntensity: preset.backgroundIntensity,
+      beatReactivity: preset.beatReactivity,
+      trails: preset.trails,
+      hueDrift: preset.hueDrift,
+    };
+    set(patch);
+    persistAll({ ...getPersistedSnapshot(get), ...patch });
+  },
+
+  deletePreset: (id) => {
+    const presets = get().presets.filter((p) => p.id !== id);
+    set({ presets });
+    savePresets(presets);
+  },
+
+  exportPreset: (id) => {
+    const preset = get().presets.find((p) => p.id === id);
+    if (!preset) return '';
+    // Strip the local id — importer mints a fresh one.
+    const { id: _omit, ...shareable } = preset;
+    void _omit;
+    return btoa(JSON.stringify({ type: 'viz-preset', preset: shareable }));
+  },
+
+  importPreset: (encoded) => {
+    try {
+      const data = JSON.parse(atob(encoded.trim()));
+      const p = data?.preset;
+      if (!p || typeof p.name !== 'string' || !validateGains(p.vizGains)) return false;
+      const preset: VizPreset = {
+        id: `preset_${Date.now()}`,
+        name: p.name,
+        mode: p.mode === 'oscilloscope' ? 'oscilloscope' : 'bars',
+        vizGains: [...p.vizGains],
+        mirrored: !!p.mirrored,
+        orientation: p.orientation === 'flipped' ? 'flipped' : 'normal',
+        backgroundEffect: p.backgroundEffect ?? 'none',
+        backgroundIntensity: typeof p.backgroundIntensity === 'number' ? p.backgroundIntensity : 1.0,
+        beatReactivity: typeof p.beatReactivity === 'number' ? p.beatReactivity : 1.0,
+        trails: !!p.trails,
+        hueDrift: !!p.hueDrift,
+      };
+      const presets = [...get().presets, preset];
+      set({ presets });
+      savePresets(presets);
+      return true;
+    } catch { return false; }
+  },
 }));

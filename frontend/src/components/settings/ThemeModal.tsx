@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { themes, useThemeStore, applyTheme, type ThemeDefinition } from '../../stores/themeStore';
 import { useCustomThemeStore } from '../../stores/customThemeStore';
-import { useVisualizerStore, type BackgroundEffect } from '../../stores/visualizerStore';
+import { useVisualizerStore } from '../../stores/visualizerStore';
 import { ThemeCreator } from './ThemeCreator';
+import { EqControls } from '../visualizer/EqControls';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import type { CustomThemeInput } from '../../lib/colorUtils';
 
@@ -11,27 +12,22 @@ interface ThemeModalProps {
   onClose: () => void;
 }
 
-type SectionId = 'appearance' | 'background' | 'performance';
+type SectionId = 'appearance' | 'audio' | 'performance';
 
 const SECTIONS: { id: SectionId; label: string; icon: string }[] = [
   { id: 'appearance', label: 'Appearance', icon: 'palette' },
-  { id: 'background', label: 'Background', icon: 'gradient' },
+  { id: 'audio', label: 'Audio', icon: 'graphic_eq' },
   { id: 'performance', label: 'Performance', icon: 'speed' },
-];
-
-const BG_EFFECTS: { value: BackgroundEffect; label: string; icon: string }[] = [
-  { value: 'none', label: 'None', icon: 'block' },
-  { value: 'color-pulse', label: 'Color Pulse', icon: 'favorite' },
-  { value: 'gradient-wave', label: 'Gradient Wave', icon: 'waves' },
-  { value: 'ambient-blobs', label: 'Ambient Blobs', icon: 'blur_on' },
-  { value: 'particles', label: 'Particles', icon: 'auto_awesome' },
 ];
 
 export function ThemeModal({ onClose }: ThemeModalProps) {
   const navigate = useNavigate();
   const { currentTheme, setTheme } = useThemeStore();
   const { customThemes, deleteTheme, exportTheme, importTheme } = useCustomThemeStore();
-  const { backgroundEffect, backgroundIntensity, setBackgroundEffect, setBackgroundIntensity, perfHud, setPerfHud } = useVisualizerStore();
+  const {
+    audioGains, setAudioGain, resetAudioGains, exportAudioEQ, importAudioEQ,
+    perfHud, setPerfHud, reduceVisuals, setReduceVisuals,
+  } = useVisualizerStore();
 
   const [section, setSection] = useState<SectionId>('appearance');
   const [showCreator, setShowCreator] = useState(false);
@@ -266,46 +262,24 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
               </div>
             )}
 
-            {/* ── Background ──────────────────────────────────────────── */}
-            {section === 'background' && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h3 className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-3">Background Effect</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {BG_EFFECTS.map((fx) => (
-                      <button
-                        key={fx.value}
-                        onClick={() => setBackgroundEffect(fx.value)}
-                        className={`flex flex-col items-center justify-center gap-2 px-3 py-5 rounded-xl text-sm font-medium transition-all ${
-                          backgroundEffect === fx.value
-                            ? 'bg-primary/10 text-primary border border-primary/30'
-                            : 'bg-surface-container-lowest text-on-surface-variant border border-transparent hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-2xl">{fx.icon}</span>
-                        {fx.label}
-                      </button>
-                    ))}
-                  </div>
+            {/* ── Audio ───────────────────────────────────────────────── */}
+            {section === 'audio' && (
+              <div className="space-y-4 max-w-2xl">
+                <div className="rounded-xl bg-surface-container-lowest p-5">
+                  <EqControls
+                    title="Audio EQ"
+                    subtitle="Shapes the sound — changes are heard live."
+                    gains={audioGains}
+                    onChange={setAudioGain}
+                    onReset={resetAudioGains}
+                    onExport={exportAudioEQ}
+                    onImport={importAudioEQ}
+                  />
                 </div>
-
-                {backgroundEffect !== 'none' && (
-                  <div className="rounded-xl bg-surface-container-lowest p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm font-medium text-on-surface">Intensity</span>
-                      <span className="text-xs text-on-surface-variant font-mono">{Math.round(backgroundIntensity * 100)}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0.05"
-                      max="2.0"
-                      step="0.05"
-                      value={backgroundIntensity}
-                      onChange={(e) => setBackgroundIntensity(parseFloat(e.target.value))}
-                      className="w-full accent-primary h-1.5 rounded-full appearance-none bg-surface-container-high cursor-pointer"
-                    />
-                  </div>
-                )}
+                <p className="text-xs text-on-surface-variant/70 px-1">
+                  Visualizer sensitivity and on-screen effects live in the Visualizer Studio
+                  (the <span className="material-symbols-outlined text-[13px] align-middle">equalizer</span> icon in the player bar) so you can watch changes as you make them.
+                </p>
               </div>
             )}
 
@@ -322,11 +296,29 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
                       Performance HUD
                     </span>
                     <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${perfHud ? 'bg-primary' : 'bg-surface-container-high'}`}>
-                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${perfHud ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${perfHud ? 'translate-x-4' : 'translate-x-0'}`} />
                     </span>
                   </button>
                   <p className="mt-2 text-xs text-on-surface-variant">
                     Shows a live FPS readout in the top bar, plus particle worker stats when the Particles background is active.
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-surface-container-lowest p-4">
+                  <button
+                    onClick={() => setReduceVisuals(!reduceVisuals)}
+                    className="flex w-full items-center justify-between gap-3 text-left"
+                  >
+                    <span className="flex items-center gap-2 text-sm font-medium text-on-surface">
+                      <span className="material-symbols-outlined text-base text-on-surface-variant">battery_saver</span>
+                      Reduce visuals
+                    </span>
+                    <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${reduceVisuals ? 'bg-primary' : 'bg-surface-container-high'}`}>
+                      <span className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white transition-transform ${reduceVisuals ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </span>
+                  </button>
+                  <p className="mt-2 text-xs text-on-surface-variant">
+                    Calmer, lighter visuals for low-power devices — disables background effects, trails, hue drift, and beat flashes.
                   </p>
                 </div>
               </div>
