@@ -173,6 +173,15 @@ export function VisualizerStudio({ onClose }: VisualizerStudioProps) {
               <span className="text-xs text-on-surface-variant">Hue drift</span>
               <Toggle on={s.hueDrift} onChange={s.setHueDrift} />
             </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-xs text-on-surface-variant">Constellations</span>
+                <p className={`text-[10px] leading-tight ${s.backgroundEffect === 'particles' ? 'text-on-surface-variant/50' : 'text-amber-400/70'}`}>
+                  {s.backgroundEffect === 'particles' ? 'Links nearby particles' : 'Needs the Particles scene'}
+                </p>
+              </div>
+              <Toggle on={s.constellations} onChange={s.setConstellations} />
+            </div>
           </div>
         </Section>
 
