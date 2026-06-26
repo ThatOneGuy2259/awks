@@ -18,6 +18,7 @@ const BG_EFFECTS: { value: BackgroundEffect; label: string; icon: string }[] = [
 const MODES: { value: VisualizerMode; label: string; icon: string }[] = [
   { value: 'bars', label: 'Bars', icon: 'equalizer' },
   { value: 'oscilloscope', label: 'Scope', icon: 'monitoring' },
+  { value: 'radial', label: 'Radial', icon: 'radar' },
 ];
 
 function Section({ title, children, defaultOpen = true }: { title: string; children: ReactNode; defaultOpen?: boolean }) {

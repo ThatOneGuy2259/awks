@@ -5,8 +5,8 @@ import { usePlaybackSync, formatTime } from '../../hooks/usePlaybackSync';
 import { VolumeSlider } from '../player/VolumeSlider';
 import { VisualizerStudio } from '../visualizer/VisualizerStudio';
 import { MiniViz } from '../visualizer/MiniViz';
+import { SpectrumCanvas } from '../visualizer/SpectrumCanvas';
 import { api } from '../../lib/api';
-import { useVisualizer } from '../../hooks/useVisualizer';
 import { useUIStore } from '../../stores/uiStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { RemoveOwnSongButton } from '../social/RemoveOwnSongButton';
@@ -23,7 +23,6 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   const votesRequired = getVotesRequired();
   const { elapsed, duration } = usePlaybackSync();
 
-  const canvasRef = useVisualizer(analyserRef);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const studioOpen = useVisualizerStore((s) => s.studioOpen);
   const setStudioOpen = useVisualizerStore((s) => s.setStudioOpen);
@@ -96,13 +95,17 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
 
   return (
     <>
-      {/* Shared visualizer canvas — reflections overlap the player bar */}
-      <canvas
-        ref={canvasRef}
-        width={1920}
-        height={280}
-        className={`hidden lg:block fixed right-0 pointer-events-none z-[51] h-[220px] -bottom-[22px] xl:h-[280px] xl:-bottom-[4px] transition-[left,width] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0 w-full' : 'left-64 w-[calc(100%-16rem)]'}`}
+      {/* Player-bar backdrop — sits BELOW the canvas (z-49) so the visualizer
+          reflections glow over it, while the bar's content renders ABOVE the
+          canvas (z-52) and stays readable (incl. with trails on). */}
+      <div
+        aria-hidden
+        className={`hidden lg:block fixed bottom-0 right-0 z-[49] h-16 xl:h-24 bg-surface/80 backdrop-blur-xl border-t border-white/5 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}
       />
+
+      {/* Spectrum visualizer — bottom strip for bars/scope, full-screen backdrop
+          for centered modes (radial). Geometry picked by mode inside the host. */}
+      <SpectrumCanvas analyserRef={analyserRef} />
 
       {/* ── Mobile mini-player: below lg, floats above the bottom nav ── */}
       <div className="lg:hidden fixed left-0 right-0 bottom-[84px] z-40 px-3">
@@ -134,7 +137,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
       </div>
 
       {/* ── Compact layout: lg to xl ── */}
-      <footer className={`hidden lg:flex xl:hidden fixed bottom-0 right-0 h-16 bg-surface/80 backdrop-blur-xl px-4 items-center gap-3 border-t border-white/5 z-50 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}>
+      <footer className={`hidden lg:flex xl:hidden fixed bottom-0 right-0 h-16 px-4 items-center gap-3 z-[52] transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}>
         <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0">
           <img className="w-full h-full object-cover" src={track.thumbnail} alt={track.title} />
         </div>
@@ -158,7 +161,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
       </footer>
 
       {/* ── Full layout: xl and up ── */}
-      <footer className={`hidden xl:flex fixed bottom-0 right-0 h-24 bg-surface/80 backdrop-blur-xl px-8 items-center justify-between border-t border-white/5 z-50 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}>
+      <footer className={`hidden xl:flex fixed bottom-0 right-0 h-24 px-8 items-center justify-between z-[52] transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}>
         <div className="flex items-center gap-4 w-1/3 flex-shrink-0">
           <div className="w-12 h-12 rounded-lg overflow-hidden">
             <img className="w-full h-full object-cover" src={track.thumbnail} alt={track.title} />

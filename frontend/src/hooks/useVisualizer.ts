@@ -204,7 +204,10 @@ export function useVisualizer(
       if (!timeArray) return;
       const w = canvas.width;
       const samples = timeArray.length;
-      const amp = 95;
+      // Centered higher than the bars baseline + a touch shorter so the whole
+      // wave sits above the player bar instead of straddling it.
+      const center = 92;
+      const amp = 70;
       const step = Math.max(1, Math.floor(samples / 720));
 
       const grad = ctx.createLinearGradient(0, 0, w, 0);
@@ -217,7 +220,7 @@ export function useVisualizer(
       let first = true;
       for (let i = 0; i < samples; i += step) {
         const x = (i / (samples - 1)) * w;
-        const y = baseline + ((timeArray[i] - 128) / 128) * amp;
+        const y = center + ((timeArray[i] - 128) / 128) * amp;
         if (first) { ctx.moveTo(x, y); first = false; }
         else ctx.lineTo(x, y);
       }
@@ -230,6 +233,72 @@ export function useVisualizer(
       }
       ctx.stroke();
       ctx.restore();
+    };
+
+    // ── Radial renderer (#2) — 128 bands as a ring radiating from center ──────
+    const drawRadial = (mirrored: boolean, orientation: string, pulse: number) => {
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const maxR = Math.min(cx, cy) - Math.min(cx, cy) * 0.06;
+      const innerR = Math.max(14, maxR * 0.12);
+      const span = maxR - innerR;
+      const pulseBoost = 1 + pulse * 0.06;
+      const full = mirrored ? Math.PI : Math.PI * 2;
+      const anglePer = full / barCount;
+      const gap = anglePer * 0.15;
+      const top = -Math.PI / 2;
+
+      const drawWedge = (i: number, aStart: number, aEnd: number, r: number) => {
+        ctx.beginPath();
+        ctx.arc(cx, cy, innerR, aStart, aEnd);
+        ctx.arc(cx, cy, r, aEnd, aStart, true);
+        ctx.closePath();
+        ctx.fillStyle = colorsTop[i];
+        ctx.fill();
+        if (peaks[i] > 0.05) {
+          const pr = innerR + peaks[i] * span;
+          ctx.beginPath();
+          ctx.arc(cx, cy, pr, aStart, aEnd);
+          ctx.strokeStyle = colorsTop[i];
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      };
+
+      for (let i = 0; i < barCount; i++) {
+        const value = smoothed[i];
+        if (value > peaks[i]) {
+          peaks[i] = value;
+          peakDecay[i] = 0;
+        } else {
+          peakDecay[i] += 0.0008;
+          peaks[i] = Math.max(peaks[i] - peakDecay[i], 0);
+        }
+        const r = innerR + value * span * pulseBoost;
+        const pos = orientation === 'flipped' ? barCount - 1 - i : i;
+        const a = top + pos * anglePer;
+        drawWedge(i, a + gap, a + anglePer - gap, r);
+        if (mirrored) {
+          const am = top - pos * anglePer;
+          drawWedge(i, am - anglePer + gap, am - gap, r);
+        }
+      }
+
+      if (pulse > 0.01) {
+        const fh = baseMidHue + currentDrift;
+        const g = ctx.createRadialGradient(cx, cy, innerR, cx, cy, maxR);
+        g.addColorStop(0, `hsla(${fh}, 90%, 70%, ${pulse * 0.1})`);
+        g.addColorStop(1, `hsla(${fh}, 90%, 70%, 0)`);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(cx, cy, maxR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
     };
 
     let lastDraw = 0;
@@ -300,6 +369,8 @@ export function useVisualizer(
           }
         }
         drawScope(pulse, reduce);
+      } else if (mode === 'radial') {
+        drawRadial(st.mirrored, st.orientation, pulse);
       } else {
         drawBars(st.mirrored, st.orientation, pulse);
       }
