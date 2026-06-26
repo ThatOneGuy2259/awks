@@ -123,7 +123,35 @@ interface Particle {
   x: number; y: number; vx: number; vy: number; size: number; color: string; life: number;
 }
 
-function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _freq: ReturnType<typeof getFrequencyData>, particles: Particle[], colors: ReturnType<typeof getThemeColors>, gain: number, _beat: BeatDetector, _analyserRef: AnalyserNode | null, mirrored: boolean, orientation: VisualizerOrientation) {
+// Cached circle sprite per color — drawImage of a small pre-rendered bitmap is
+// far cheaper than beginPath+arc+fill per particle, with effectively identical
+// output. Keyed by color string (bounded by the ~128 bar colors).
+const SPRITE_RADIUS = 8;
+const dotSprites = new Map<string, HTMLCanvasElement>();
+function getDotSprite(color: string): HTMLCanvasElement {
+  const cached = dotSprites.get(color);
+  if (cached) return cached;
+  const s = document.createElement('canvas');
+  s.width = s.height = SPRITE_RADIUS * 2;
+  const sctx = s.getContext('2d');
+  if (sctx) {
+    sctx.fillStyle = color;
+    sctx.beginPath();
+    sctx.arc(SPRITE_RADIUS, SPRITE_RADIUS, SPRITE_RADIUS, 0, Math.PI * 2);
+    sctx.fill();
+  }
+  dotSprites.set(color, s);
+  return s;
+}
+
+// Object pool — recycle dead particles instead of allocating a new object on
+// every spawn, which removes the per-frame GC churn behind frame-time spikes.
+const particlePool: Particle[] = [];
+function acquireParticle(): Particle {
+  return particlePool.pop() ?? { x: 0, y: 0, vx: 0, vy: 0, size: 0, color: '', life: 0 };
+}
+
+function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _freq: ReturnType<typeof getFrequencyData>, particles: Particle[], colors: ReturnType<typeof getThemeColors>, gain: number, _beat: BeatDetector, _analyserRef: AnalyserNode | null, mirrored: boolean, orientation: VisualizerOrientation, qualityScale: number) {
   ctx.clearRect(0, 0, w, h);
 
   // Spawn particles from visualizer bar tops using shared barHeights
@@ -142,8 +170,9 @@ function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _fre
     const value = barHeights[i]; // 0-1, matches the visualizer's smoothed value
     if (value < 0.2) continue;
 
-    // Only spawn probabilistically — higher bars have higher chance
-    if (Math.random() > value * 0.3 * gain) continue;
+    // Only spawn probabilistically — higher bars have higher chance.
+    // qualityScale throttles spawn rate when the device is struggling.
+    if (Math.random() > value * 0.3 * gain * qualityScale) continue;
 
     const barHeight = value * vizMaxBarHeight;
     const spawnY = vizBaseline - barHeight;
@@ -167,41 +196,45 @@ function drawParticles(ctx: CanvasRenderingContext2D, w: number, h: number, _fre
     const size = (0.8 + value * 1.5) * Math.min(gain, 1.5);
 
     for (const px of xPositions) {
-      {
-        particles.push({
-          x: px + (Math.random() - 0.5) * 15,
-          y: spawnY + (Math.random() - 0.5) * 8,
-          vx: (Math.random() - 0.5) * 1.2,
-          vy: -speed,
-          size,
-          color,
-          life: 0.5 + value * 0.5,
-        });
-      }
+      const p = acquireParticle();
+      p.x = px + (Math.random() - 0.5) * 15;
+      p.y = spawnY + (Math.random() - 0.5) * 8;
+      p.vx = (Math.random() - 0.5) * 1.2;
+      p.vy = -speed;
+      p.size = size;
+      p.color = color;
+      p.life = 0.5 + value * 0.5;
+      particles.push(p);
     }
   }
 
-  // Update and draw — swap-and-pop removal to avoid O(n²) splice
+  // Update and draw — compact in place (swap-and-pop) to avoid O(n²) splice,
+  // recycling dead particles back into the pool.
   let writeIdx = 0;
   for (let i = 0; i < particles.length; i++) {
     const p = particles[i];
     p.x += p.vx;
     p.y += p.vy;
     p.life -= 0.005;
-    if (p.life <= 0 || p.y < -10) continue;
+    if (p.life <= 0 || p.y < -10) {
+      particlePool.push(p);
+      continue;
+    }
     ctx.globalAlpha = p.life * 0.85;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
+    const sprite = getDotSprite(p.color);
+    const d = p.size * 2;
+    ctx.drawImage(sprite, p.x - p.size, p.y - p.size, d, d);
     particles[writeIdx++] = p;
   }
   particles.length = writeIdx;
   ctx.globalAlpha = 1;
 
-  // Cap particle count
-  const maxParticles = Math.floor(4000 * Math.max(gain, 1));
+  // Cap particle count (scaled down on struggling devices); recycle the excess.
+  const maxParticles = Math.floor(4000 * Math.max(gain, 1) * qualityScale);
   if (particles.length > maxParticles) {
+    for (let i = maxParticles; i < particles.length; i++) {
+      particlePool.push(particles[i]);
+    }
     particles.length = maxParticles;
   }
 }
@@ -214,6 +247,7 @@ export function BackgroundEffectCanvas({ analyserRef }: BackgroundEffectProps) {
   const animRef = useRef<number>(0);
   const blobsRef = useRef<Blob[]>([]);
   const particlesRef = useRef<Particle[]>([]);
+  const qualityRef = useRef(1); // 0.3..1 — particle budget scaler, adapts to frame time
   const startTimeRef = useRef(Date.now());
   const beatRef = useRef<BeatDetector | null>(null);
   const intensityRef = useRef(intensity);
@@ -268,6 +302,7 @@ export function BackgroundEffectCanvas({ analyserRef }: BackgroundEffectProps) {
 
       const gain = intensityRef.current;
       smoothAudio(freq);
+      const tDraw = performance.now();
       switch (effect) {
         case 'color-pulse':
           drawColorPulse(ctx, w, h, freq, colors, gain, beat);
@@ -281,9 +316,16 @@ export function BackgroundEffectCanvas({ analyserRef }: BackgroundEffectProps) {
           break;
         case 'particles':
           drawParticles(ctx, w, h, freq, particlesRef.current, colors, gain, beat, analyserRef.current,
-            useVisualizerStore.getState().mirrored, useVisualizerStore.getState().orientation);
+            useVisualizerStore.getState().mirrored, useVisualizerStore.getState().orientation, qualityRef.current);
           break;
       }
+
+      // Adapt particle budget to actual draw cost: back off when a frame's
+      // render runs long, recover gradually when there's headroom. Keeps full
+      // quality on capable devices, degrades gracefully on weak ones.
+      const drawMs = performance.now() - tDraw;
+      if (drawMs > 12) qualityRef.current = Math.max(0.3, qualityRef.current - 0.05);
+      else if (drawMs < 7) qualityRef.current = Math.min(1, qualityRef.current + 0.02);
     };
 
     animRef.current = requestAnimationFrame(draw);

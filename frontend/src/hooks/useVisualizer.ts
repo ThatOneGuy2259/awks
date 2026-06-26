@@ -158,22 +158,29 @@ export function useVisualizer(
           peaks[i] = Math.max(peaks[i] - peakDecay[i], 0);
         }
 
+        // Gradients are purely vertical (x-independent), so build them once per
+        // bar and reuse for both mirrored draws instead of re-allocating inside
+        // drawBarSet — same output, fewer per-frame allocations.
+        const grad = ctx.createLinearGradient(0, baseline - barHeight, 0, baseline);
+        grad.addColorStop(0, colorsTop[i]);
+        grad.addColorStop(1, colorsMid[i]);
+
+        const reflectionHeight = Math.min(barHeight * 0.5, maxReflectionHeight);
+        const reflGrad = ctx.createLinearGradient(0, baseline, 0, baseline + reflectionHeight);
+        reflGrad.addColorStop(0, colorsDim[i]);
+        reflGrad.addColorStop(1, colorsFade[i]);
+
+        const peakY = baseline - peaks[i] * maxBarHeight;
+        const showPeak = peaks[i] > 0.05;
+
         const drawBarSet = (x: number) => {
-          const grad = ctx.createLinearGradient(0, baseline - barHeight, 0, baseline);
-          grad.addColorStop(0, colorsTop[i]);
-          grad.addColorStop(1, colorsMid[i]);
           ctx.fillStyle = grad;
           ctx.fillRect(x, baseline - barHeight, barWidth, barHeight);
 
-          const reflectionHeight = Math.min(barHeight * 0.5, maxReflectionHeight);
-          const reflGrad = ctx.createLinearGradient(0, baseline, 0, baseline + reflectionHeight);
-          reflGrad.addColorStop(0, colorsDim[i]);
-          reflGrad.addColorStop(1, colorsFade[i]);
           ctx.fillStyle = reflGrad;
           ctx.fillRect(x, baseline, barWidth, reflectionHeight);
 
-          const peakY = baseline - peaks[i] * maxBarHeight;
-          if (peaks[i] > 0.05) {
+          if (showPeak) {
             ctx.fillStyle = colorsTop[i];
             ctx.fillRect(x, peakY - 2, barWidth, 2);
           }

@@ -1,17 +1,18 @@
-import { useEffect, useState, lazy, Suspense, type RefObject } from 'react';
+import { useEffect, useState, Suspense, type RefObject } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SignedIn, SignedOut, SignIn, useAuth } from '@clerk/clerk-react';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { BottomNav } from './components/layout/BottomNav';
 import { PlayerBar } from './components/layout/PlayerBar';
-import { MusicQueueView } from './pages/MusicQueueView';
 import { useWebSocket } from './hooks/useWebSocket';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 
-const SearchRequestView = lazy(() => import('./pages/SearchRequestView').then(m => ({ default: m.SearchRequestView })));
-const AdminDashboardView = lazy(() => import('./pages/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
-const HistoryView = lazy(() => import('./pages/HistoryView').then(m => ({ default: m.HistoryView })));
-const WmpPage = lazy(() => import('./pages/wmp/WmpPage').then(m => ({ default: m.WmpPage })));
+const MusicQueueView = lazyWithRetry(() => import('./pages/MusicQueueView').then(m => ({ default: m.MusicQueueView })));
+const SearchRequestView = lazyWithRetry(() => import('./pages/SearchRequestView').then(m => ({ default: m.SearchRequestView })));
+const AdminDashboardView = lazyWithRetry(() => import('./pages/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
+const HistoryView = lazyWithRetry(() => import('./pages/HistoryView').then(m => ({ default: m.HistoryView })));
+const WmpPage = lazyWithRetry(() => import('./pages/wmp/WmpPage').then(m => ({ default: m.WmpPage })));
 import { useWebRTC } from './hooks/useWebRTC';
 import { useUIStore } from './stores/uiStore';
 import { setGetTokenFn, api } from './lib/api';
@@ -21,6 +22,7 @@ import { getAllThemes } from './stores/customThemeStore';
 import { AwksLogo } from './components/AwksLogo';
 import { ToastContainer } from './components/ToastContainer';
 import { ConnectionBanner } from './components/ConnectionBanner';
+import { AudioBanner } from './components/AudioBanner';
 import { BackgroundEffectCanvas } from './components/BackgroundEffect';
 
 // Apply saved theme on module load (before React renders)
@@ -66,6 +68,7 @@ function AppContent() {
   return (
     <>
       <ConnectionBanner />
+      <AudioBanner />
       <Routes>
         <Route
           path="/wmp"

@@ -6,6 +6,7 @@ import (
 	"log"
 	"sync"
 
+	"github.com/pion/interceptor"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -13,16 +14,45 @@ import (
 type PeerManager struct {
 	track      *webrtc.TrackLocalStaticSample
 	iceServers []webrtc.ICEServer
+	api        *webrtc.API
 	mu         sync.Mutex
 	peers      map[string]*webrtc.PeerConnection // keyed by client ID
 }
 
-func NewPeerManager(track *webrtc.TrackLocalStaticSample, iceServers []webrtc.ICEServer) *PeerManager {
+func NewPeerManager(track *webrtc.TrackLocalStaticSample, iceServers []webrtc.ICEServer) (*PeerManager, error) {
+	// Custom MediaEngine so we can negotiate stereo Opus. Pion's default Opus
+	// fmtp is "minptime=10;useinbandfec=1" (no stereo), which makes browsers
+	// downmix to mono on playout even though we send stereo packets. Adding
+	// stereo=1;sprop-stereo=1 delivers real stereo at the same bitrate.
+	// useinbandfec=1 is kept for packet-loss resilience over WebRTC.
+	m := &webrtc.MediaEngine{}
+	if err := m.RegisterCodec(webrtc.RTPCodecParameters{
+		RTPCodecCapability: webrtc.RTPCodecCapability{
+			MimeType:    webrtc.MimeTypeOpus,
+			ClockRate:   48000,
+			Channels:    2,
+			SDPFmtpLine: "minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1",
+		},
+		PayloadType: 111,
+	}, webrtc.RTPCodecTypeAudio); err != nil {
+		return nil, fmt.Errorf("register opus codec: %w", err)
+	}
+
+	// Keep pion's default interceptors (RTCP reports, NACK, etc.) — required
+	// for healthy audio when using a custom MediaEngine.
+	ir := &interceptor.Registry{}
+	if err := webrtc.RegisterDefaultInterceptors(m, ir); err != nil {
+		return nil, fmt.Errorf("register interceptors: %w", err)
+	}
+
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithInterceptorRegistry(ir))
+
 	return &PeerManager{
 		track:      track,
 		iceServers: iceServers,
+		api:        api,
 		peers:      make(map[string]*webrtc.PeerConnection),
-	}
+	}, nil
 }
 
 // HandleOffer processes an SDP offer from a client and returns an SDP answer.
@@ -36,7 +66,7 @@ func (pm *PeerManager) HandleOffer(clientID string, offerSDP string, sendToClien
 	}
 	pm.mu.Unlock()
 
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{
+	pc, err := pm.api.NewPeerConnection(webrtc.Configuration{
 		ICEServers: pm.iceServers,
 	})
 	if err != nil {
