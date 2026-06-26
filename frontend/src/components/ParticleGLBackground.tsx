@@ -106,7 +106,7 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
 
       const bars = new Float32Array(BAR_COUNT);
       bars.set(barHeights);
-      const { mirrored, orientation, visualizerMode } = useVisualizerStore.getState();
+      const { mirrored, orientation, visualizerMode, constellations, reduceVisuals } = useVisualizerStore.getState();
       const sidebarOpen = window.innerWidth > 1024 && !useUIStore.getState().sidebarCollapsed;
       const transfer: Transferable[] = [bars.buffer];
       let wave: Float32Array | undefined;
@@ -125,6 +125,7 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
           mirrored,
           orientation,
           sidebarOpen,
+          constellations: constellations && !reduceVisuals,
           width: window.innerWidth,
           height: window.innerHeight,
         },
