@@ -329,7 +329,9 @@ func SyncPlaylist(ctx context.Context, ytdlpPath, cacheDir string) {
 func downloadTrack(ctx context.Context, ytdlpPath, videoID, outputPath string) error {
 	tmpBase := outputPath + "-tmp"
 	cmd := exec.CommandContext(ctx, ytdlpPath,
-		"-f", "bestaudio",
+		// bestaudio/best: fall back to a combined stream when YouTube hides the
+		// audio-only formats; the ffmpeg repack re-encodes to opus regardless.
+		"-f", "bestaudio/best",
 		"--no-playlist",
 		"--no-warnings",
 		"-o", tmpBase+".%(ext)s",

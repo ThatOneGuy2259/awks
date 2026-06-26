@@ -19,6 +19,11 @@ jobs:
           git fetch origin main
           git reset --hard origin/main
 
+      # Keep yt-dlp current — YouTube's anti-bot changes break older versions.
+      # Non-fatal: a failed self-update must never block a deploy.
+      - name: Update yt-dlp
+        run: sudo yt-dlp -U || true
+
       - name: Build frontend + backend
         run: |
           cd "$HOME/awks"
