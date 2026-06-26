@@ -13,6 +13,7 @@ export function PerfHud() {
   const workerFps = usePerfStore((s) => s.workerFps);
   const workerFrameMs = usePerfStore((s) => s.workerFrameMs);
   const particleCount = usePerfStore((s) => s.particleCount);
+  const quality = usePerfStore((s) => s.quality);
   const [fps, setFps] = useState(0);
 
   // Measure main-thread frame rate (only while the HUD is on).
@@ -53,6 +54,11 @@ export function PerfHud() {
           <span className="text-on-surface-variant/50">
             {workerFps}w {workerFrameMs.toFixed(1)}ms
           </span>
+          {quality < 0.99 && (
+            <span className="text-amber-400" title="Auto-scaled down to protect frame rate">
+              ▼{Math.round(quality * 100)}%
+            </span>
+          )}
         </>
       )}
     </div>

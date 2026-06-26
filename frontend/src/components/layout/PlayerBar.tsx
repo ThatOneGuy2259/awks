@@ -1,13 +1,14 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useSkipVoteStore } from '../../stores/skipVoteStore';
 import { usePlaybackSync, formatTime } from '../../hooks/usePlaybackSync';
 import { VolumeSlider } from '../player/VolumeSlider';
-import { VisualizerEQ } from '../player/VisualizerEQ';
+import { VisualizerStudio } from '../visualizer/VisualizerStudio';
+import { MiniViz } from '../visualizer/MiniViz';
 import { api } from '../../lib/api';
 import { useVisualizer } from '../../hooks/useVisualizer';
 import { useUIStore } from '../../stores/uiStore';
+import { useVisualizerStore } from '../../stores/visualizerStore';
 import { RemoveOwnSongButton } from '../social/RemoveOwnSongButton';
 
 interface PlayerBarProps {
@@ -24,7 +25,9 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
 
   const canvasRef = useVisualizer(analyserRef);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
-  const [showEQ, setShowEQ] = useState(false);
+  const studioOpen = useVisualizerStore((s) => s.studioOpen);
+  const setStudioOpen = useVisualizerStore((s) => s.setStudioOpen);
+  const miniViz = useVisualizerStore((s) => s.miniViz);
   const navigate = useNavigate();
 
   if (!track) return null;
@@ -81,11 +84,11 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
 
   const eqButton = (
     <button
-      onClick={() => setShowEQ(!showEQ)}
+      onClick={() => setStudioOpen(!studioOpen)}
       className={`p-1.5 rounded-full transition-all ${
-        showEQ ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:text-primary'
+        studioOpen ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:text-primary'
       }`}
-      title="Visualizer EQ"
+      title="Visualizer Studio"
     >
       <span className="material-symbols-outlined text-lg">equalizer</span>
     </button>
@@ -164,6 +167,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
             <p className="text-sm font-bold text-on-surface truncate">{track.title}</p>
             <p className="text-xs text-on-surface-variant truncate">{track.artist}</p>
           </div>
+          {miniViz && <MiniViz className="h-7 w-20 hidden 2xl:block opacity-70 ml-1" />}
         </div>
 
         <div className="flex flex-col items-center gap-2 w-1/3">
@@ -184,8 +188,8 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
         </div>
       </footer>
 
-      {/* EQ Panel — shared, renders above whichever footer is visible */}
-      {showEQ && <VisualizerEQ onClose={() => setShowEQ(false)} />}
+      {/* Visualizer Studio — right-docked rail, non-occluding so you tune live */}
+      {studioOpen && <VisualizerStudio onClose={() => setStudioOpen(false)} />}
     </>
   );
 }
