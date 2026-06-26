@@ -23,7 +23,7 @@ import { AwksLogo } from './components/AwksLogo';
 import { ToastContainer } from './components/ToastContainer';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { AudioBanner } from './components/AudioBanner';
-import { BackgroundEffectCanvas } from './components/BackgroundEffect';
+import { BackgroundLayer } from './components/BackgroundLayer';
 
 // Apply saved theme on module load (before React renders)
 const startupThemeId = useThemeStore.getState().currentTheme;
@@ -111,7 +111,7 @@ function ShellLayout({ volume, setVolume, listening, analyserRef }: ShellLayoutP
 
   return (
     <>
-      <BackgroundEffectCanvas analyserRef={analyserRef} />
+      <BackgroundLayer analyserRef={analyserRef} />
       <TopBar />
       <Sidebar listening={listening} />
 
