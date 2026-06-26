@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { setServerBpm } from '../lib/audioMetrics';
 
 interface PlaybackState {
   currentTrack: {
@@ -12,6 +13,7 @@ interface PlaybackState {
     requesterAvatar: string;
     startedAt: string;
     durationSec: number;
+    bpm?: number; // authoritative tempo from the server (0/undefined = unknown)
   } | null;
   isPlaying: boolean;
   setTrack: (track: PlaybackState['currentTrack']) => void;
@@ -22,7 +24,14 @@ interface PlaybackState {
 export const usePlaybackStore = create<PlaybackState>((set) => ({
   currentTrack: null,
   isPlaying: false,
-  setTrack: (track) => set({ currentTrack: track, isPlaying: !!track }),
+  setTrack: (track) => {
+    // Hand the server's tempo to the visualizer (0 falls back to the client estimate).
+    setServerBpm(track?.bpm ?? 0);
+    set({ currentTrack: track, isPlaying: !!track });
+  },
   setPlaying: (playing) => set({ isPlaying: playing }),
-  clear: () => set({ currentTrack: null, isPlaying: false }),
+  clear: () => {
+    setServerBpm(0);
+    set({ currentTrack: null, isPlaying: false });
+  },
 }));

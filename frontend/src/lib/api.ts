@@ -99,6 +99,7 @@ export interface QueueTrack {
   status: string;
   audio_status: string;
   created_at: string;
+  bpm?: number;
 }
 
 export interface PlaybackState {
@@ -113,6 +114,7 @@ export interface PlaybackState {
   requester_name: string;
   requester_avatar: string;
   playing?: boolean;
+  bpm?: number;
 }
 
 export interface HistoryEntry {

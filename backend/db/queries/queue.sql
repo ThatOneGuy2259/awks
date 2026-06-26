@@ -1,7 +1,7 @@
 -- name: GetQueue :many
 SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec,
        q.thumbnail_url, q.requested_by, q.position, q.status, q.created_at,
-       q.audio_status, q.audio_path,
+       q.audio_status, q.audio_path, q.bpm,
        u.username as requester_name, u.avatar_url as requester_avatar
 FROM queue q
 JOIN users u ON q.requested_by = u.id
@@ -10,13 +10,13 @@ ORDER BY q.position ASC;
 
 -- name: GetQueueItem :one
 SELECT id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url,
-       requested_by, position, status, created_at, audio_status, audio_path
+       requested_by, position, status, created_at, audio_status, audio_path, bpm
 FROM queue WHERE id = ?;
 
 -- name: GetCurrentlyPlaying :one
 SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec,
        q.thumbnail_url, q.requested_by, q.position, q.status, q.created_at,
-       q.audio_status, q.audio_path,
+       q.audio_status, q.audio_path, q.bpm,
        u.username as requester_name, u.avatar_url as requester_avatar
 FROM queue q
 JOIN users u ON q.requested_by = u.id
@@ -63,7 +63,7 @@ ORDER BY position ASC;
 
 -- name: GetNextReadyPending :one
 SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec, q.thumbnail_url,
-       q.requested_by, q.position, q.status, q.created_at, q.audio_status, q.audio_path,
+       q.requested_by, q.position, q.status, q.created_at, q.audio_status, q.audio_path, q.bpm,
        COALESCE(u.username, q.requested_by) AS requester_name,
        u.avatar_url AS requester_avatar
 FROM queue q
@@ -90,3 +90,6 @@ SELECT COUNT(*) FROM queue WHERE requested_by = 'auto-dj' AND status IN ('pendin
 
 -- name: UpdateDuration :exec
 UPDATE queue SET duration_sec = ? WHERE id = ?;
+
+-- name: SetBpm :exec
+UPDATE queue SET bpm = ? WHERE id = ?;

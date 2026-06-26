@@ -14,6 +14,9 @@ export interface AudioMetrics {
   centroid: number; // 0..1 spectral centroid — timbral "brightness" (smoothed)
   beat: boolean;    // true only on the frame a beat onset is detected
   pulse: number;    // 0..1 — snaps up on a beat then decays; drive visuals with this
+  bpm: number;      // tempo from the server (aubio, per-track); 0 = unknown
+  bpmConfidence: number; // 1 when the server tempo is known, else 0
+  beatPhase: number; // 0..1 sawtooth locked to the tempo grid (0 at each beat) — drive on-beat anims
 }
 
 export const audioMetrics: AudioMetrics = {
@@ -23,6 +26,9 @@ export const audioMetrics: AudioMetrics = {
   centroid: 0,
   beat: false,
   pulse: 0,
+  bpm: 0,
+  bpmConfidence: 0,
+  beatPhase: 0,
 };
 
 let emaBass = 0;       // running average of bass energy (beat baseline)
@@ -32,6 +38,25 @@ let lastBeatTime = 0;  // ms timestamp of last accepted beat (refractory)
 const REFRACTORY_MS = 120;  // min gap between beats (~500 bpm ceiling)
 const BEAT_FLOOR = 0.18;    // ignore beats when bass is near silent
 const BEAT_RATIO = 1.35;    // bass must exceed this × its running average
+
+// ── Tempo (#54) ─────────────────────────────────────────────────────────────
+// Tempo is computed server-side at ingest (aubio, per track) and pushed in via
+// setServerBpm — accurate and instant, no browser estimation. We keep the value
+// only to drive `beatPhase`, the tempo-locked 0→1 ramp on-beat effects sync to.
+let beatPeriodMs = 0; // 60000/bpm — phase advance rate; 0 when tempo unknown
+let serverBpm = 0;    // authoritative tempo from the backend (0 = unknown)
+
+/**
+ * Supply the server's per-track BPM (computed at ingest by aubio). The single
+ * source of tempo. Pass 0 to clear it (track still extracting / unknown), which
+ * also zeroes the tempo-locked phase period so beatPhase falls back to pulse.
+ */
+export function setServerBpm(bpm: number): void {
+  serverBpm = bpm > 0 ? bpm : 0;
+  audioMetrics.bpm = serverBpm > 0 ? Math.round(serverBpm) : 0;
+  audioMetrics.bpmConfidence = serverBpm > 0 ? 1 : 0;
+  beatPeriodMs = serverBpm > 0 ? 60000 / serverBpm : 0;
+}
 
 /**
  * Update the shared `audioMetrics` from a frame of byte frequency data.
@@ -87,5 +112,14 @@ export function updateAudioMetrics(freq: Uint8Array): void {
   } else {
     audioMetrics.pulse *= Math.exp(-dt / 140); // decay over ~140ms
     if (audioMetrics.pulse < 0.001) audioMetrics.pulse = 0;
+  }
+
+  // ── Tempo-locked phase: ramps 0→1 over one beat period, snaps to 0 on beats ─
+  if (beatPeriodMs > 0) {
+    audioMetrics.beatPhase += dt / beatPeriodMs;
+    if (beat) audioMetrics.beatPhase = 0; // hard re-sync to detected onsets
+    audioMetrics.beatPhase -= Math.floor(audioMetrics.beatPhase); // wrap to [0,1)
+  } else {
+    audioMetrics.beatPhase = audioMetrics.pulse; // fallback when tempo unknown
   }
 }

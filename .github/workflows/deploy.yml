@@ -24,6 +24,11 @@ jobs:
       - name: Update yt-dlp
         run: sudo yt-dlp -U || true
 
+      # Tempo detection at ingest needs the aubio CLI. Idempotent — apt is a
+      # no-op once it's installed. Non-fatal so it never blocks a deploy.
+      - name: Ensure aubio-tools
+        run: command -v aubio >/dev/null 2>&1 || sudo apt-get install -y aubio-tools || true
+
       - name: Build frontend + backend
         run: |
           cd "$HOME/awks"

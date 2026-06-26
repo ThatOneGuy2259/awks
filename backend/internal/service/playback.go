@@ -137,6 +137,7 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 		RequestedBy:    next.RequestedBy,
 		RequesterName:  requesterName,
 		RequesterAvatar: nullStringToString(next.RequesterAvatar),
+		Bpm:            nullFloatToFloat(next.Bpm),
 	}
 	s.state = state
 
@@ -152,6 +153,7 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 			RequestedBy:    state.RequestedBy,
 			RequesterName:  state.RequesterName,
 			RequesterAvatar: state.RequesterAvatar,
+			Bpm:            state.Bpm,
 		},
 	})
 
@@ -255,4 +257,11 @@ func nullStringToString(t sql.NullString) string {
 		return t.String
 	}
 	return ""
+}
+
+func nullFloatToFloat(f sql.NullFloat64) float64 {
+	if f.Valid {
+		return f.Float64
+	}
+	return 0
 }

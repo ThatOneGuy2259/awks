@@ -62,6 +62,7 @@ func (h *QueueHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
 			Status:          row.Status,
 			AudioStatus:     row.AudioStatus,
 			CreatedAt:       createdAt,
+			Bpm:             nullFloat(row.Bpm),
 		})
 	}
 	writeJSON(w, tracks)
@@ -177,6 +178,7 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 		Position:    int(item.Position),
 		Status:      item.Status,
 		AudioStatus: item.AudioStatus,
+		Bpm:         nullFloat(item.Bpm),
 	})
 }
 
@@ -302,6 +304,13 @@ func nullStr(t sql.NullString) string {
 		return t.String
 	}
 	return ""
+}
+
+func nullFloat(f sql.NullFloat64) float64 {
+	if f.Valid {
+		return f.Float64
+	}
+	return 0
 }
 
 func parseUUID(s string) (string, error) {
