@@ -24,6 +24,7 @@ import { ToastContainer } from './components/ToastContainer';
 import { ConnectionBanner } from './components/ConnectionBanner';
 import { AudioBanner } from './components/AudioBanner';
 import { BackgroundLayer } from './components/BackgroundLayer';
+import { EmptyState } from './components/EmptyState';
 
 // Apply saved theme on module load (before React renders)
 const startupThemeId = useThemeStore.getState().currentTheme;
@@ -115,7 +116,7 @@ function ShellLayout({ volume, setVolume, listening, analyserRef }: ShellLayoutP
       <TopBar />
       <Sidebar listening={listening} />
 
-      <main className={`pt-20 pb-32 min-h-screen relative z-[2] transition-[padding-left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-64'}`}>
+      <main className={`pt-20 pb-44 lg:pb-32 min-h-screen relative z-[2] transition-[padding-left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-64'}`}>
         <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
           <Routes>
             <Route path="/" element={<MusicQueueView />} />
@@ -136,10 +137,12 @@ function AdminRoute() {
   const isAdmin = useUserStore((s) => s.role === 'admin');
   if (!isAdmin) {
     return (
-      <div className="text-center py-24 text-on-surface-variant">
-        <span className="material-symbols-outlined text-5xl mb-4 block">lock</span>
-        <p className="text-xl font-bold">Admin access required</p>
-      </div>
+      <EmptyState
+        icon="lock"
+        title="Admin access required"
+        subtitle="You need administrator privileges to view this page."
+        size="lg"
+      />
     );
   }
   return <AdminDashboardView />;

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useSkipVoteStore } from '../../stores/skipVoteStore';
 import { usePlaybackSync, formatTime } from '../../hooks/usePlaybackSync';
@@ -24,6 +25,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   const canvasRef = useVisualizer(analyserRef);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const [showEQ, setShowEQ] = useState(false);
+  const navigate = useNavigate();
 
   if (!track) return null;
 
@@ -98,6 +100,35 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
         height={280}
         className={`hidden lg:block fixed right-0 pointer-events-none z-[51] h-[220px] -bottom-[22px] xl:h-[280px] xl:-bottom-[4px] transition-[left,width] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0 w-full' : 'left-64 w-[calc(100%-16rem)]'}`}
       />
+
+      {/* ── Mobile mini-player: below lg, floats above the bottom nav ── */}
+      <div className="lg:hidden fixed left-0 right-0 bottom-[84px] z-40 px-3">
+        <div className="relative flex items-center gap-3 h-14 px-3 rounded-2xl bg-surface-container-highest/80 backdrop-blur-xl border border-white/5 shadow-[0_8px_30px_rgba(0,0,0,0.25)] overflow-hidden">
+          {/* progress line pinned to the top edge */}
+          <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/5">
+            <div className="h-full bg-secondary transition-[width] duration-1000 linear" style={{ width: `${progress}%` }} />
+          </div>
+
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-3 min-w-0 flex-1 text-left"
+            aria-label="Open now playing"
+          >
+            <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+              <img className="w-full h-full object-cover" src={track.thumbnail} alt={track.title} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-on-surface truncate" title={track.title}>{track.title}</p>
+              <p className="text-[10px] text-on-surface-variant truncate">
+                <span className="tabular-nums">{formatTime(elapsed)}</span> / {formatTime(duration)} · {track.artist}
+              </p>
+            </div>
+          </button>
+
+          {skipButton(true)}
+          <RemoveOwnSongButton compact />
+        </div>
+      </div>
 
       {/* ── Compact layout: lg to xl ── */}
       <footer className={`hidden lg:flex xl:hidden fixed bottom-0 right-0 h-16 bg-surface/80 backdrop-blur-xl px-4 items-center gap-3 border-t border-white/5 z-50 transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'left-0' : 'left-64'}`}>

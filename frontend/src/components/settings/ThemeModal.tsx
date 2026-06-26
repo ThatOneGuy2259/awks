@@ -4,6 +4,7 @@ import { themes, useThemeStore, applyTheme, type ThemeDefinition } from '../../s
 import { useCustomThemeStore } from '../../stores/customThemeStore';
 import { useVisualizerStore, type BackgroundEffect } from '../../stores/visualizerStore';
 import { ThemeCreator } from './ThemeCreator';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 import type { CustomThemeInput } from '../../lib/colorUtils';
 
 interface ThemeModalProps {
@@ -40,6 +41,8 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
   const [importError, setImportError] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  useEscapeClose(onClose);
 
   const handleSelect = (theme: ThemeDefinition) => {
     setTheme(theme.id);

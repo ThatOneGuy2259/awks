@@ -4,6 +4,7 @@ import { useListenerStore } from '../stores/listenerStore';
 import { AdminQueueItem } from '../components/admin/AdminQueueItem';
 import { SkipVotesRequiredControl, MaxTracksPerUserControl } from '../components/admin/SkipVotesRequiredControl';
 import { UserTimeoutModal } from '../components/admin/UserTimeoutModal';
+import { EmptyState } from '../components/EmptyState';
 import { api } from '../lib/api';
 
 export function AdminDashboardView() {
@@ -80,9 +81,7 @@ export function AdminDashboardView() {
               <AdminQueueItem key={track.id} track={track} />
             ))}
             {!playing && pending.length === 0 && (
-              <div className="text-center py-12 text-on-surface-variant">
-                <p>No tracks in queue.</p>
-              </div>
+              <EmptyState icon="queue_music" title="No tracks in queue" subtitle="Requested songs will appear here." size="sm" />
             )}
           </div>
         </section>

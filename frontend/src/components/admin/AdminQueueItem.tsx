@@ -60,13 +60,13 @@ export function AdminQueueItem({ track, isPlaying }: AdminQueueItemProps) {
           )}
           <span className="text-on-surface-variant text-xs">Requested by @{track.requester_name}</span>
         </div>
-        <h4 className="text-xl font-bold truncate text-on-surface">{track.title}</h4>
+        <h4 className="text-xl font-bold truncate text-on-surface" title={track.title}>{track.title}</h4>
         <p className="text-on-surface-variant text-sm truncate font-medium">
           {track.artist} &bull; {Math.floor(track.duration_sec / 60)}:{String(track.duration_sec % 60).padStart(2, '0')}
         </p>
       </div>
 
-      <div className={`flex gap-2 ${isPlaying ? '' : 'opacity-0 group-hover:opacity-100 transition-opacity'}`}>
+      <div className={`flex gap-2 ${isPlaying ? '' : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity'}`}>
         {!isPlaying && (
           <button
             onClick={handleMoveToTop}

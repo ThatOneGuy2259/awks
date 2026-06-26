@@ -1,3 +1,5 @@
+import { useEscapeClose } from '../hooks/useEscapeClose';
+
 interface HelpModalProps {
   onClose: () => void;
 }
@@ -54,6 +56,7 @@ const sections = [
 ];
 
 export function HelpModal({ onClose }: HelpModalProps) {
+  useEscapeClose(onClose);
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />

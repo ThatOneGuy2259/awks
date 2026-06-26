@@ -1,5 +1,6 @@
 import { useQueueStore } from '../../stores/queueStore';
 import { QueueItem } from './QueueItem';
+import { EmptyState } from '../EmptyState';
 
 export function QueueList() {
   const tracks = useQueueStore((s) => s.tracks);
@@ -7,10 +8,12 @@ export function QueueList() {
 
   if (pending.length === 0) {
     return (
-      <div className="text-center py-12 text-on-surface-variant">
-        <span className="material-symbols-outlined text-4xl mb-2 block">queue_music</span>
-        <p>Queue is empty. Search and add some tracks!</p>
-      </div>
+      <EmptyState
+        icon="queue_music"
+        title="Queue is empty"
+        subtitle="Search and add some tracks to get the party started."
+        size="sm"
+      />
     );
   }
 

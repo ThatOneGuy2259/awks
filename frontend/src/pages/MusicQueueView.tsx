@@ -18,7 +18,7 @@ export function MusicQueueView() {
         {track && (
           <section className="relative group">
             <ReactionOverlay />
-            <div className="flex flex-col md:flex-row items-end md:items-center gap-8">
+            <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="relative flex-shrink-0">
                 <div className="w-48 h-48 md:w-64 md:h-64 rounded-xl overflow-hidden shadow-2xl shadow-primary/20 rotate-[-2deg] group-hover:rotate-0 transition-transform duration-500">
                   <img
@@ -27,9 +27,9 @@ export function MusicQueueView() {
                     alt={track.title}
                   />
                 </div>
-                <div className="absolute -bottom-4 -right-4 p-4 rounded-full signature-gradient shadow-xl text-black flex items-center justify-center">
-                  <span className="material-symbols-outlined text-3xl" style={{ fontVariationSettings: "'FILL' 1" }}>
-                    pause
+                <div className="absolute -bottom-4 -right-4 p-4 rounded-full signature-gradient shadow-xl text-black flex items-center justify-center" aria-label="Now playing live" title="Playing live">
+                  <span className="material-symbols-outlined text-3xl animate-pulse" style={{ fontVariationSettings: "'FILL' 1" }}>
+                    graphic_eq
                   </span>
                 </div>
               </div>
