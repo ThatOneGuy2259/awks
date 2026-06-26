@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import { EmoteFetcher, EmoteParser } from '@mkody/twitch-emoticons';
+// Type-only import — erased at build time. The runtime library (heavy) is
+// dynamically imported inside initialize() so it stays out of the home bundle.
+import type { EmoteFetcher, EmoteParser } from '@mkody/twitch-emoticons';
 
 export interface Emote {
   id: string;
@@ -66,6 +68,7 @@ export const useEmoteStore = create<EmoteState>((set, get) => ({
     set({ loading: true });
 
     try {
+      const { EmoteFetcher, EmoteParser } = await import('@mkody/twitch-emoticons');
       const fetcher = new EmoteFetcher({
         forceStatic: false,
         twitchThemeMode: 'dark',

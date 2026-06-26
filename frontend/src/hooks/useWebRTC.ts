@@ -1,6 +1,11 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
 import { wsSend, onWsMessage, offWsMessage } from './useWebSocket';
 import { useVisualizerStore, EQ_BANDS, sliderToDb } from '../stores/visualizerStore';
+import { useAudioStore } from '../stores/audioStore';
+
+// Consecutive ICE failures before we surface a user-facing error (we keep
+// retrying in the background regardless).
+const MAX_ICE_FAILURES = 3;
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -16,6 +21,8 @@ export function useWebRTC() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const volumeRef = useRef(70);
   const connectedRef = useRef(false);
+  const iceFailuresRef = useRef(0);
+  const setAudioStatus = useAudioStore((s) => s.setStatus);
   const [volume, setVolumeState] = useState(() => {
     const saved = localStorage.getItem('awks-volume');
     const v = saved ? parseInt(saved) : 70;
@@ -40,6 +47,7 @@ export function useWebRTC() {
     gainNodeRef.current = null;
 
     console.log('[webrtc] creating peer connection...');
+    setAudioStatus(iceFailuresRef.current >= MAX_ICE_FAILURES ? 'error' : 'connecting');
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
 
@@ -135,12 +143,18 @@ export function useWebRTC() {
       audio.play().then(() => {
         console.log('[webrtc] audio playing');
         connectedRef.current = true;
+        iceFailuresRef.current = 0;
         setListening(true);
+        setAudioStatus('playing');
       }).catch(() => {
+        // Autoplay blocked — stream is fine, we just need a user gesture.
+        setAudioStatus('blocked');
         const tryPlay = () => {
           audio.play().then(() => {
             connectedRef.current = true;
+            iceFailuresRef.current = 0;
             setListening(true);
+            setAudioStatus('playing');
             document.removeEventListener('click', tryPlay);
             document.removeEventListener('keydown', tryPlay);
           }).catch(() => {});
@@ -165,9 +179,12 @@ export function useWebRTC() {
 
       if (pc.iceConnectionState === 'connected') {
         connectedRef.current = true;
+        iceFailuresRef.current = 0;
       } else if (pc.iceConnectionState === 'failed') {
         connectedRef.current = false;
+        iceFailuresRef.current += 1;
         setListening(false);
+        setAudioStatus(iceFailuresRef.current >= MAX_ICE_FAILURES ? 'error' : 'connecting');
         setTimeout(connect, 2000);
       } else if (pc.iceConnectionState === 'disconnected') {
         disconnectTimer = setTimeout(() => {
@@ -175,6 +192,7 @@ export function useWebRTC() {
             console.log('[webrtc] still disconnected, reconnecting...');
             connectedRef.current = false;
             setListening(false);
+            setAudioStatus('connecting');
             connect();
           }
         }, 3000);
@@ -189,7 +207,7 @@ export function useWebRTC() {
     }).catch((err) => {
       console.error('[webrtc] offer error:', err);
     });
-  }, []);
+  }, [setAudioStatus]);
 
   // Listen for signaling responses
   useEffect(() => {
