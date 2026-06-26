@@ -81,7 +81,10 @@ func main() {
 	}
 
 	// WebRTC Peer Manager
-	peerManager := audio.NewPeerManager(broadcaster.Track(), cfg.ICEServers)
+	peerManager, err := audio.NewPeerManager(broadcaster.Track(), cfg.ICEServers)
+	if err != nil {
+		log.Fatalf("failed to create peer manager: %v", err)
+	}
 
 	// WebSocket Hub
 	hub := ws.NewHub(nil)
@@ -230,8 +233,8 @@ func main() {
 		log.Printf("[broadcaster] sent crossfade hint")
 	}
 
-	// Start broadcaster goroutine
-	go broadcaster.Run(ctx, func() (string, float64, int, error) {
+	// Broadcaster track source + completion callbacks.
+	broadcasterGetNext := func() (string, float64, int, error) {
 		path, err := playbackSvc.GetCurrentAudioPath(context.Background())
 		if err != nil || path == "" {
 			return "", 0, 0, nil
@@ -251,9 +254,35 @@ func main() {
 			}
 		}
 		return path, offset, dur, nil
-	}, func(skipped bool) {
+	}
+	broadcasterOnDone := func(skipped bool) {
 		playbackSvc.AdvanceQueue(context.Background())
-	})
+	}
+
+	// Supervisor: keep the broadcaster running for the life of the server.
+	// Broadcaster.Run already recovers per-track panics; this is defense in
+	// depth so that if Run ever returns or panics outright while ctx is still
+	// alive, we restart it instead of leaving every listener silent.
+	go func() {
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						log.Printf("[broadcaster] supervisor recovered panic: %v", r)
+					}
+				}()
+				broadcaster.Run(ctx, broadcasterGetNext, broadcasterOnDone)
+			}()
+			if ctx.Err() != nil {
+				return
+			}
+			log.Printf("[broadcaster] Run exited unexpectedly; restarting in 1s")
+			time.Sleep(time.Second)
+		}
+	}()
 
 	// Resume playback on startup
 	go func() {

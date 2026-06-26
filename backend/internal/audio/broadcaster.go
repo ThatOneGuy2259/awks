@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"github.com/pion/webrtc/v4"
@@ -24,7 +25,7 @@ type Broadcaster struct {
 
 func NewBroadcaster() (*Broadcaster, error) {
 	track, err := webrtc.NewTrackLocalStaticSample(
-		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus},
+		webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2},
 		"audio",
 		"awks-radio",
 	)
@@ -59,30 +60,56 @@ func (b *Broadcaster) Wake() {
 	}
 }
 
-// Run is the main broadcaster loop.
+// Run is the main broadcaster loop. Each iteration is supervised so that a
+// panic while fetching or streaming a track is recovered and logged instead
+// of crashing the whole process (an unrecovered panic in any goroutine takes
+// down the entire Go program, silencing every listener). Run only returns
+// when ctx is cancelled.
 // getNextTrack returns (audioPath, startOffset, durationSec, error).
 func (b *Broadcaster) Run(ctx context.Context, getNextTrack func() (string, float64, int, error), onTrackDone func(skipped bool)) {
 	for {
-		audioPath, startOffset, durationSec, err := getNextTrack()
-		if err != nil {
-			log.Printf("[broadcaster] error getting next track: %v", err)
-			time.Sleep(2 * time.Second)
-			continue
+		if ctx.Err() != nil {
+			return
 		}
-
-		if audioPath == "" {
-			select {
-			case <-ctx.Done():
-				return
-			case <-b.wakeCh:
-				continue
-			}
+		if stop := b.runOnce(ctx, getNextTrack, onTrackDone); stop {
+			return
 		}
-
-		log.Printf("[broadcaster] streaming %s (offset=%.1fs, duration=%ds)", audioPath, startOffset, durationSec)
-		skipped := b.streamFile(ctx, audioPath, startOffset, durationSec)
-		onTrackDone(skipped)
 	}
+}
+
+// runOnce processes a single track (or waits for one) with panic recovery.
+// It returns true only when ctx is done and the loop should exit. Any panic
+// is recovered, logged with a stack trace, and the loop continues with a
+// short backoff so a repeatable panic can't become a hot crash loop.
+func (b *Broadcaster) runOnce(ctx context.Context, getNextTrack func() (string, float64, int, error), onTrackDone func(skipped bool)) (stop bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[broadcaster] PANIC recovered: %v\n%s", r, debug.Stack())
+			time.Sleep(time.Second)
+			stop = false
+		}
+	}()
+
+	audioPath, startOffset, durationSec, err := getNextTrack()
+	if err != nil {
+		log.Printf("[broadcaster] error getting next track: %v", err)
+		time.Sleep(2 * time.Second)
+		return false
+	}
+
+	if audioPath == "" {
+		select {
+		case <-ctx.Done():
+			return true
+		case <-b.wakeCh:
+			return false
+		}
+	}
+
+	log.Printf("[broadcaster] streaming %s (offset=%.1fs, duration=%ds)", audioPath, startOffset, durationSec)
+	skipped := b.streamFile(ctx, audioPath, startOffset, durationSec)
+	onTrackDone(skipped)
+	return false
 }
 
 // streamFile reads an OGG/Opus file and writes samples to the WebRTC track at real-time pace.
