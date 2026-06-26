@@ -26,19 +26,20 @@ type PlayHistory struct {
 }
 
 type Queue struct {
-	ID           string         `json:"id"`
-	YoutubeUrl   string         `json:"youtube_url"`
-	VideoID      string         `json:"video_id"`
-	Title        string         `json:"title"`
-	Artist       sql.NullString `json:"artist"`
-	DurationSec  int64          `json:"duration_sec"`
-	ThumbnailUrl sql.NullString `json:"thumbnail_url"`
-	RequestedBy  string         `json:"requested_by"`
-	Position     int64          `json:"position"`
-	Status       string         `json:"status"`
-	CreatedAt    string         `json:"created_at"`
-	AudioStatus  string         `json:"audio_status"`
-	AudioPath    sql.NullString `json:"audio_path"`
+	ID           string          `json:"id"`
+	YoutubeUrl   string          `json:"youtube_url"`
+	VideoID      string          `json:"video_id"`
+	Title        string          `json:"title"`
+	Artist       sql.NullString  `json:"artist"`
+	DurationSec  int64           `json:"duration_sec"`
+	ThumbnailUrl sql.NullString  `json:"thumbnail_url"`
+	RequestedBy  string          `json:"requested_by"`
+	Position     int64           `json:"position"`
+	Status       string          `json:"status"`
+	CreatedAt    string          `json:"created_at"`
+	AudioStatus  string          `json:"audio_status"`
+	AudioPath    sql.NullString  `json:"audio_path"`
+	Bpm          sql.NullFloat64 `json:"bpm"`
 }
 
 type SkipVote struct {

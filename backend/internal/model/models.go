@@ -13,6 +13,7 @@ type PlaybackState struct {
 	RequestedBy    string    `json:"requested_by"`
 	RequesterName  string    `json:"requester_name"`
 	RequesterAvatar string   `json:"requester_avatar"`
+	Bpm            float64   `json:"bpm"` // estimated tempo; 0 = unknown
 }
 
 type QueueTrack struct {
@@ -30,6 +31,7 @@ type QueueTrack struct {
 	Status         string    `json:"status"`
 	AudioStatus    string    `json:"audio_status"`
 	CreatedAt      time.Time `json:"created_at"`
+	Bpm            float64   `json:"bpm"` // estimated tempo; 0 = unknown
 }
 
 type Listener struct {
@@ -59,6 +61,7 @@ type TrackChangeData struct {
 	RequestedBy    string `json:"requested_by"`
 	RequesterName  string `json:"requester_name"`
 	RequesterAvatar string `json:"requester_avatar"`
+	Bpm            float64 `json:"bpm"` // estimated tempo; 0 = unknown
 }
 
 type SyncData struct {

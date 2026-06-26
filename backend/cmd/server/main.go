@@ -64,6 +64,17 @@ func main() {
 		}
 	}
 
+	// Additive column migrations for pre-existing databases (CREATE TABLE IF NOT
+	// EXISTS above won't add new columns to a table that already exists). Each is
+	// idempotent — a "duplicate column name" error just means it's already there.
+	for _, alter := range []string{
+		"ALTER TABLE queue ADD COLUMN bpm REAL",
+	} {
+		if _, err := db.ExecContext(context.Background(), alter); err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+			log.Printf("column migration warning (%q): %v", alter, err)
+		}
+	}
+
 	// Reset stale 'playing' tracks from previous run (playback state is in-memory, lost on restart)
 	db.ExecContext(context.Background(), "UPDATE queue SET status = 'pending' WHERE status = 'playing'")
 
@@ -191,10 +202,11 @@ func main() {
 			return false
 		}
 		// Insert into queue with audio_status=ready and audio_path in one query
+		queueID := uuid.New().String()
 		_, err := db.ExecContext(ctx,
 			`INSERT INTO queue (id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status, audio_path)
 			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM queue), 'ready', ?)`,
-			uuid.New().String(),
+			queueID,
 			fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID),
 			videoID, title, artist, duration,
 			fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", videoID),
@@ -206,6 +218,18 @@ func main() {
 		}
 		log.Printf("[auto-dj] queued: %s - %s", title, artist)
 		hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+
+		// Tempo detection is ~1s — do it off the auto-DJ path. The track plays
+		// later (after the current one), so BPM lands well before it's needed.
+		go func(id, path string) {
+			if bpm, ok := audio.DetectBPM(path); ok {
+				queries.SetBpm(context.Background(), store.SetBpmParams{
+					ID:  id,
+					Bpm: sql.NullFloat64{Float64: bpm, Valid: true},
+				})
+				hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+			}
+		}(queueID, filePath)
 		return true
 	})
 

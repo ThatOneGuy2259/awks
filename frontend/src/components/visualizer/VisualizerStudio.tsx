@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useVisualizerStore, type BackgroundEffect, type VisualizerMode, type VisualizerOrientation } from '../../stores/visualizerStore';
 import { EqControls } from './EqControls';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { audioMetrics } from '../../lib/audioMetrics';
 
 interface VisualizerStudioProps {
   onClose: () => void;
@@ -34,6 +35,26 @@ function Section({ title, children, defaultOpen = true }: { title: string; child
       </button>
       {open && <div className="mt-3">{children}</div>}
     </div>
+  );
+}
+
+// Live tempo readout. audioMetrics is a mutable singleton (not reactive), so we
+// poll it a few times a second rather than re-rendering the whole studio.
+function BpmBadge() {
+  const [bpm, setBpm] = useState(0);
+  const [confident, setConfident] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setBpm(audioMetrics.bpm);
+      setConfident(audioMetrics.bpmConfidence > 0.25);
+    }, 250);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-on-surface-variant" title="Estimated tempo">
+      <span className="material-symbols-outlined text-xs leading-none">music_note</span>
+      {confident && bpm > 0 ? `${bpm} BPM` : '— BPM'}
+    </span>
   );
 }
 
@@ -90,6 +111,7 @@ export function VisualizerStudio({ onClose }: VisualizerStudioProps) {
             <span className="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse" />
             Live
           </span>
+          <BpmBadge />
         </div>
         <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors" aria-label="Close studio">
           <span className="material-symbols-outlined text-base">close</span>

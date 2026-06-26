@@ -132,6 +132,16 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 
 		log.Printf("[extractor] extracted audio for %s -> %s", queueID, outputPath)
 
+		// Estimate tempo (best-effort) before marking ready so the now-playing
+		// payload carries an accurate BPM. ~1s; negligible vs the download above.
+		if bpm, ok := DetectBPM(outputPath); ok {
+			e.queries.SetBpm(context.Background(), store.SetBpmParams{
+				ID:  queueID,
+				Bpm: sql.NullFloat64{Float64: bpm, Valid: true},
+			})
+			log.Printf("[extractor] detected %.1f bpm for %s", bpm, queueID)
+		}
+
 		e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
 			ID:          queueID,
 			AudioStatus: "ready",

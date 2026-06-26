@@ -40,6 +40,7 @@ type Querier interface {
 	IsVideoInQueue(ctx context.Context, videoID string) (int64, error)
 	MoveToTop(ctx context.Context, id string) error
 	RetractSkipVote(ctx context.Context, arg RetractSkipVoteParams) error
+	SetBpm(ctx context.Context, arg SetBpmParams) error
 	UpdateAudioStatus(ctx context.Context, arg UpdateAudioStatusParams) error
 	UpdateDuration(ctx context.Context, arg UpdateDurationParams) error
 	UpdateQueueStatus(ctx context.Context, arg UpdateQueueStatusParams) error

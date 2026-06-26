@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS queue (
     status        TEXT NOT NULL DEFAULT 'pending',
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     audio_status  TEXT NOT NULL DEFAULT 'pending',
-    audio_path    TEXT
+    audio_path    TEXT,
+    bpm           REAL
 );
 CREATE INDEX IF NOT EXISTS idx_queue_status_position ON queue(status, position);
 

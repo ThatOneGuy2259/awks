@@ -80,6 +80,7 @@ function connectWs(token: string) {
           requesterAvatar: state.requester_avatar || '',
           startedAt: state.started_at,
           durationSec: state.duration_sec,
+          bpm: state.bpm,
         });
       }
       if (settings) {
@@ -156,7 +157,7 @@ function handleMessage(msg: { type: string; data: unknown }) {
       const d = data as {
         queue_id: string; video_id: string; title: string; artist: string;
         started_at: string; duration_sec: number; requested_by: string;
-        requester_name?: string; requester_avatar?: string;
+        requester_name?: string; requester_avatar?: string; bpm?: number;
       };
       if (!d.video_id) {
         usePlaybackStore.getState().clear();
@@ -172,6 +173,7 @@ function handleMessage(msg: { type: string; data: unknown }) {
           requesterAvatar: d.requester_avatar || '',
           startedAt: d.started_at,
           durationSec: d.duration_sec,
+          bpm: d.bpm,
         });
       }
       useSkipVoteStore.getState().reset();

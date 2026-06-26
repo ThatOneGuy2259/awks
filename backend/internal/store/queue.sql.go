@@ -80,7 +80,7 @@ func (q *Queries) GetActiveQueueIDs(ctx context.Context) ([]string, error) {
 const getCurrentlyPlaying = `-- name: GetCurrentlyPlaying :one
 SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec,
        q.thumbnail_url, q.requested_by, q.position, q.status, q.created_at,
-       q.audio_status, q.audio_path,
+       q.audio_status, q.audio_path, q.bpm,
        u.username as requester_name, u.avatar_url as requester_avatar
 FROM queue q
 JOIN users u ON q.requested_by = u.id
@@ -89,21 +89,22 @@ LIMIT 1
 `
 
 type GetCurrentlyPlayingRow struct {
-	ID              string         `json:"id"`
-	YoutubeUrl      string         `json:"youtube_url"`
-	VideoID         string         `json:"video_id"`
-	Title           string         `json:"title"`
-	Artist          sql.NullString `json:"artist"`
-	DurationSec     int64          `json:"duration_sec"`
-	ThumbnailUrl    sql.NullString `json:"thumbnail_url"`
-	RequestedBy     string         `json:"requested_by"`
-	Position        int64          `json:"position"`
-	Status          string         `json:"status"`
-	CreatedAt       string         `json:"created_at"`
-	AudioStatus     string         `json:"audio_status"`
-	AudioPath       sql.NullString `json:"audio_path"`
-	RequesterName   string         `json:"requester_name"`
-	RequesterAvatar sql.NullString `json:"requester_avatar"`
+	ID              string          `json:"id"`
+	YoutubeUrl      string          `json:"youtube_url"`
+	VideoID         string          `json:"video_id"`
+	Title           string          `json:"title"`
+	Artist          sql.NullString  `json:"artist"`
+	DurationSec     int64           `json:"duration_sec"`
+	ThumbnailUrl    sql.NullString  `json:"thumbnail_url"`
+	RequestedBy     string          `json:"requested_by"`
+	Position        int64           `json:"position"`
+	Status          string          `json:"status"`
+	CreatedAt       string          `json:"created_at"`
+	AudioStatus     string          `json:"audio_status"`
+	AudioPath       sql.NullString  `json:"audio_path"`
+	Bpm             sql.NullFloat64 `json:"bpm"`
+	RequesterName   string          `json:"requester_name"`
+	RequesterAvatar sql.NullString  `json:"requester_avatar"`
 }
 
 func (q *Queries) GetCurrentlyPlaying(ctx context.Context) (GetCurrentlyPlayingRow, error) {
@@ -123,6 +124,7 @@ func (q *Queries) GetCurrentlyPlaying(ctx context.Context) (GetCurrentlyPlayingR
 		&i.CreatedAt,
 		&i.AudioStatus,
 		&i.AudioPath,
+		&i.Bpm,
 		&i.RequesterName,
 		&i.RequesterAvatar,
 	)
@@ -194,7 +196,7 @@ func (q *Queries) GetNextPendingExtraction(ctx context.Context) (GetNextPendingE
 
 const getNextReadyPending = `-- name: GetNextReadyPending :one
 SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec, q.thumbnail_url,
-       q.requested_by, q.position, q.status, q.created_at, q.audio_status, q.audio_path,
+       q.requested_by, q.position, q.status, q.created_at, q.audio_status, q.audio_path, q.bpm,
        COALESCE(u.username, q.requested_by) AS requester_name,
        u.avatar_url AS requester_avatar
 FROM queue q
@@ -205,21 +207,22 @@ LIMIT 1
 `
 
 type GetNextReadyPendingRow struct {
-	ID              string         `json:"id"`
-	YoutubeUrl      string         `json:"youtube_url"`
-	VideoID         string         `json:"video_id"`
-	Title           string         `json:"title"`
-	Artist          sql.NullString `json:"artist"`
-	DurationSec     int64          `json:"duration_sec"`
-	ThumbnailUrl    sql.NullString `json:"thumbnail_url"`
-	RequestedBy     string         `json:"requested_by"`
-	Position        int64          `json:"position"`
-	Status          string         `json:"status"`
-	CreatedAt       string         `json:"created_at"`
-	AudioStatus     string         `json:"audio_status"`
-	AudioPath       sql.NullString `json:"audio_path"`
-	RequesterName   string         `json:"requester_name"`
-	RequesterAvatar sql.NullString `json:"requester_avatar"`
+	ID              string          `json:"id"`
+	YoutubeUrl      string          `json:"youtube_url"`
+	VideoID         string          `json:"video_id"`
+	Title           string          `json:"title"`
+	Artist          sql.NullString  `json:"artist"`
+	DurationSec     int64           `json:"duration_sec"`
+	ThumbnailUrl    sql.NullString  `json:"thumbnail_url"`
+	RequestedBy     string          `json:"requested_by"`
+	Position        int64           `json:"position"`
+	Status          string          `json:"status"`
+	CreatedAt       string          `json:"created_at"`
+	AudioStatus     string          `json:"audio_status"`
+	AudioPath       sql.NullString  `json:"audio_path"`
+	Bpm             sql.NullFloat64 `json:"bpm"`
+	RequesterName   string          `json:"requester_name"`
+	RequesterAvatar sql.NullString  `json:"requester_avatar"`
 }
 
 func (q *Queries) GetNextReadyPending(ctx context.Context) (GetNextReadyPendingRow, error) {
@@ -239,6 +242,7 @@ func (q *Queries) GetNextReadyPending(ctx context.Context) (GetNextReadyPendingR
 		&i.CreatedAt,
 		&i.AudioStatus,
 		&i.AudioPath,
+		&i.Bpm,
 		&i.RequesterName,
 		&i.RequesterAvatar,
 	)
@@ -284,7 +288,7 @@ func (q *Queries) GetPendingExtractions(ctx context.Context) ([]GetPendingExtrac
 const getQueue = `-- name: GetQueue :many
 SELECT q.id, q.youtube_url, q.video_id, q.title, q.artist, q.duration_sec,
        q.thumbnail_url, q.requested_by, q.position, q.status, q.created_at,
-       q.audio_status, q.audio_path,
+       q.audio_status, q.audio_path, q.bpm,
        u.username as requester_name, u.avatar_url as requester_avatar
 FROM queue q
 JOIN users u ON q.requested_by = u.id
@@ -293,21 +297,22 @@ ORDER BY q.position ASC
 `
 
 type GetQueueRow struct {
-	ID              string         `json:"id"`
-	YoutubeUrl      string         `json:"youtube_url"`
-	VideoID         string         `json:"video_id"`
-	Title           string         `json:"title"`
-	Artist          sql.NullString `json:"artist"`
-	DurationSec     int64          `json:"duration_sec"`
-	ThumbnailUrl    sql.NullString `json:"thumbnail_url"`
-	RequestedBy     string         `json:"requested_by"`
-	Position        int64          `json:"position"`
-	Status          string         `json:"status"`
-	CreatedAt       string         `json:"created_at"`
-	AudioStatus     string         `json:"audio_status"`
-	AudioPath       sql.NullString `json:"audio_path"`
-	RequesterName   string         `json:"requester_name"`
-	RequesterAvatar sql.NullString `json:"requester_avatar"`
+	ID              string          `json:"id"`
+	YoutubeUrl      string          `json:"youtube_url"`
+	VideoID         string          `json:"video_id"`
+	Title           string          `json:"title"`
+	Artist          sql.NullString  `json:"artist"`
+	DurationSec     int64           `json:"duration_sec"`
+	ThumbnailUrl    sql.NullString  `json:"thumbnail_url"`
+	RequestedBy     string          `json:"requested_by"`
+	Position        int64           `json:"position"`
+	Status          string          `json:"status"`
+	CreatedAt       string          `json:"created_at"`
+	AudioStatus     string          `json:"audio_status"`
+	AudioPath       sql.NullString  `json:"audio_path"`
+	Bpm             sql.NullFloat64 `json:"bpm"`
+	RequesterName   string          `json:"requester_name"`
+	RequesterAvatar sql.NullString  `json:"requester_avatar"`
 }
 
 func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
@@ -333,6 +338,7 @@ func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
 			&i.CreatedAt,
 			&i.AudioStatus,
 			&i.AudioPath,
+			&i.Bpm,
 			&i.RequesterName,
 			&i.RequesterAvatar,
 		); err != nil {
@@ -351,7 +357,7 @@ func (q *Queries) GetQueue(ctx context.Context) ([]GetQueueRow, error) {
 
 const getQueueItem = `-- name: GetQueueItem :one
 SELECT id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url,
-       requested_by, position, status, created_at, audio_status, audio_path
+       requested_by, position, status, created_at, audio_status, audio_path, bpm
 FROM queue WHERE id = ?
 `
 
@@ -372,6 +378,7 @@ func (q *Queries) GetQueueItem(ctx context.Context, id string) (Queue, error) {
 		&i.CreatedAt,
 		&i.AudioStatus,
 		&i.AudioPath,
+		&i.Bpm,
 	)
 	return i, err
 }
@@ -379,7 +386,7 @@ func (q *Queries) GetQueueItem(ctx context.Context, id string) (Queue, error) {
 const insertQueueItem = `-- name: InsertQueueItem :one
 INSERT INTO queue (id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, audio_status)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM queue), ?)
-RETURNING id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, status, created_at, audio_status, audio_path
+RETURNING id, youtube_url, video_id, title, artist, duration_sec, thumbnail_url, requested_by, position, status, created_at, audio_status, audio_path, bpm
 `
 
 type InsertQueueItemParams struct {
@@ -421,6 +428,7 @@ func (q *Queries) InsertQueueItem(ctx context.Context, arg InsertQueueItemParams
 		&i.CreatedAt,
 		&i.AudioStatus,
 		&i.AudioPath,
+		&i.Bpm,
 	)
 	return i, err
 }
@@ -443,6 +451,20 @@ WHERE queue.id = ?
 
 func (q *Queries) MoveToTop(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, moveToTop, id)
+	return err
+}
+
+const setBpm = `-- name: SetBpm :exec
+UPDATE queue SET bpm = ? WHERE id = ?
+`
+
+type SetBpmParams struct {
+	Bpm sql.NullFloat64 `json:"bpm"`
+	ID  string          `json:"id"`
+}
+
+func (q *Queries) SetBpm(ctx context.Context, arg SetBpmParams) error {
+	_, err := q.db.ExecContext(ctx, setBpm, arg.Bpm, arg.ID)
 	return err
 }
 
