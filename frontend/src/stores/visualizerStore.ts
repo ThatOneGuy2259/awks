@@ -47,6 +47,10 @@ interface VisualizerState {
   backgroundIntensity: number; // 0.0 to 1.0, default 0.7
   setBackgroundEffect: (v: BackgroundEffect) => void;
   setBackgroundIntensity: (v: number) => void;
+
+  // Performance HUD overlay (FPS / particle stats)
+  perfHud: boolean;
+  setPerfHud: (v: boolean) => void;
 }
 
 const STORAGE_KEY = 'awks-visualizer';
@@ -59,6 +63,7 @@ interface PersistedState {
   orientation?: VisualizerOrientation;
   backgroundEffect?: BackgroundEffect;
   backgroundIntensity?: number;
+  perfHud?: boolean;
   // legacy field
   bandGains?: number[];
 }
@@ -73,15 +78,15 @@ function loadState(): PersistedState {
   }
 }
 
-function persistAll(state: { audioGains: number[]; vizGains: number[]; mirrored: boolean; orientation: VisualizerOrientation; backgroundEffect: BackgroundEffect; backgroundIntensity: number }) {
+function persistAll(state: { audioGains: number[]; vizGains: number[]; mirrored: boolean; orientation: VisualizerOrientation; backgroundEffect: BackgroundEffect; backgroundIntensity: number; perfHud: boolean }) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {}
 }
 
 function getPersistedSnapshot(get: () => VisualizerState) {
-  const { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity } = get();
-  return { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity };
+  const { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity, perfHud } = get();
+  return { audioGains, vizGains, mirrored, orientation, backgroundEffect, backgroundIntensity, perfHud };
 }
 
 const saved = loadState();
@@ -101,6 +106,7 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
   orientation: saved.orientation ?? 'normal',
   backgroundEffect: saved.backgroundEffect ?? 'none',
   backgroundIntensity: saved.backgroundIntensity ?? 1.0,
+  perfHud: saved.perfHud ?? false,
 
   setAudioGain: (band, gain) => {
     const audioGains = [...get().audioGains];
@@ -160,4 +166,5 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
   setOrientation: (v) => { set({ orientation: v }); persistAll({ ...getPersistedSnapshot(get), orientation: v }); },
   setBackgroundEffect: (v) => { set({ backgroundEffect: v }); persistAll({ ...getPersistedSnapshot(get), backgroundEffect: v }); },
   setBackgroundIntensity: (v) => { set({ backgroundIntensity: v }); persistAll({ ...getPersistedSnapshot(get), backgroundIntensity: v }); },
+  setPerfHud: (v) => { set({ perfHud: v }); persistAll({ ...getPersistedSnapshot(get), perfHud: v }); },
 }));
