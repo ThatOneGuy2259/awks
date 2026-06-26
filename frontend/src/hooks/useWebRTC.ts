@@ -254,6 +254,33 @@ export function useWebRTC() {
     };
   }, [connect]);
 
+  // Reliable audio start: browser autoplay policy blocks sound until a user
+  // gesture, so the most robust "autoplay" is to start on the FIRST interaction
+  // anywhere on the page. This proactive listener (added on mount) covers
+  // gestures that happen before the track arrives and includes touch, beyond
+  // the reactive handlers in ontrack. It removes itself once audio is playing.
+  useEffect(() => {
+    const events = ['pointerdown', 'keydown', 'touchstart'] as const;
+    const cleanup = () => events.forEach((e) => document.removeEventListener(e, onGesture));
+    const onGesture = () => {
+      const ctx = audioCtxRef.current;
+      if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+      const audio = audioRef.current;
+      if (audio && audio.paused) {
+        audio.play().then(() => {
+          connectedRef.current = true;
+          setListening(true);
+          setAudioStatus('playing');
+          cleanup();
+        }).catch(() => {});
+      } else if (audio && !audio.paused && ctx && ctx.state === 'running') {
+        cleanup();
+      }
+    };
+    events.forEach((e) => document.addEventListener(e, onGesture, { passive: true }));
+    return cleanup;
+  }, [setAudioStatus]);
+
   // Subscribe to EQ band gain changes and update audio filters in real-time
   useEffect(() => {
     const unsub = useVisualizerStore.subscribe((state) => {

@@ -5,6 +5,8 @@ import { UserButton } from '@clerk/clerk-react';
 import { ThemeModal } from '../settings/ThemeModal';
 import { AwksLogo } from '../AwksLogo';
 import { QuickSearch } from './QuickSearch';
+import { ConnectionIndicator } from '../ConnectionIndicator';
+import { PerfHud } from '../PerfHud';
 
 export function TopBar() {
   const [showSettings, setShowSettings] = useState(false);
@@ -36,6 +38,8 @@ export function TopBar() {
         {onSearchPage && <div className="flex-1" />}
 
         <div className="flex items-center gap-4">
+          <PerfHud />
+          <ConnectionIndicator />
           <button
             onClick={() => setShowSettings(true)}
             className="text-on-surface-variant hover:text-primary transition-colors flex items-center"

@@ -1,0 +1,445 @@
+// WebGL particle renderer running inside a Web Worker via OffscreenCanvas.
+//
+// Mirrors the 2D drawParticles() in
+// frontend/src/components/BackgroundEffect.tsx: same layout math, spawn rules,
+// update/decay and particle cap. Rendering is decoupled from the main thread —
+// an internal rAF loop simulates + draws from the latest received state, while
+// the main thread only pushes new state via postMessage.
+
+// ── Message contract ───────────────────────────────────────────────────────
+type Orientation = 'normal' | 'flipped';
+
+interface InitMsg {
+  type: 'init';
+  canvas: OffscreenCanvas;
+  width: number;
+  height: number;
+  dpr: number;
+}
+interface ColorsMsg {
+  type: 'colors';
+  rgb: Float32Array; // length 128*3, per-bar RGB each 0..1
+}
+interface FrameMsg {
+  type: 'frame';
+  bars: Float32Array; // length 128, each 0..1
+  gain: number;
+  mirrored: boolean;
+  orientation: Orientation;
+  sidebarOpen: boolean;
+  width: number;
+  height: number;
+}
+interface ResizeMsg {
+  type: 'resize';
+  width: number;
+  height: number;
+  dpr: number;
+}
+interface StopMsg {
+  type: 'stop';
+}
+type IncomingMsg = InitMsg | ColorsMsg | FrameMsg | ResizeMsg | StopMsg;
+
+// ── Constants matching the 2D implementation ───────────────────────────────
+const BAR_COUNT = 128;
+const FLOATS_PER_PARTICLE = 7; // posX, posY, size(px), r, g, b, a
+// Hard ceiling for preallocated buffers. The live cap is
+// floor(4000 * max(gain,1)); we clamp storage to this so the typed arrays are
+// allocated exactly once. Sized for a generous gain ceiling.
+const MAX_PARTICLES = 24000;
+
+// ── Shaders ────────────────────────────────────────────────────────────────
+const VERT_SRC = `
+attribute vec2 a_pos;     // clip space
+attribute float a_size;   // particle pixel size (diameter)
+attribute vec4 a_color;   // rgba, straight (not premultiplied)
+uniform float u_dpr;
+varying vec4 v_color;
+void main() {
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+  gl_PointSize = a_size * u_dpr;
+  v_color = a_color;
+}
+`;
+
+const FRAG_SRC = `
+precision mediump float;
+varying vec4 v_color;
+void main() {
+  vec2 c = gl_PointCoord - vec2(0.5);
+  float d = length(c);
+  float a = smoothstep(0.5, 0.4, d); // soft round dot
+  if (a <= 0.0) discard;
+  gl_FragColor = vec4(v_color.rgb, v_color.a * a);
+}
+`;
+
+// ── Worker-local state ─────────────────────────────────────────────────────
+let gl: WebGLRenderingContext | null = null;
+let program: WebGLProgram | null = null;
+let vbo: WebGLBuffer | null = null;
+let rafId = 0;
+
+let locPos = -1;
+let locSize = -1;
+let locColor = -1;
+let locDpr: WebGLUniformLocation | null = null;
+
+let dpr = 1;
+let width = 0; // logical (CSS) px — used for layout + clip-space math
+let height = 0;
+
+// Latest frame state (null until first 'frame'/'colors').
+let bars: Float32Array | null = null;
+let colors: Float32Array | null = null;
+let gain = 1;
+let mirrored = false;
+let orientation: Orientation = 'normal';
+let sidebarOpen = false;
+
+// Flat particle pool. `count` is the number of live particles.
+const px = new Float32Array(MAX_PARTICLES);
+const py = new Float32Array(MAX_PARTICLES);
+const pvx = new Float32Array(MAX_PARTICLES);
+const pvy = new Float32Array(MAX_PARTICLES);
+const psize = new Float32Array(MAX_PARTICLES);
+const pr = new Float32Array(MAX_PARTICLES);
+const pg = new Float32Array(MAX_PARTICLES);
+const pb = new Float32Array(MAX_PARTICLES);
+const plife = new Float32Array(MAX_PARTICLES);
+let count = 0;
+
+// Interleaved upload buffer.
+const vertexData = new Float32Array(MAX_PARTICLES * FLOATS_PER_PARTICLE);
+
+// ── WebGL helpers ──────────────────────────────────────────────────────────
+function compileShader(ctx: WebGLRenderingContext, type: number, src: string): WebGLShader | null {
+  const sh = ctx.createShader(type);
+  if (!sh) {
+    console.error('particleWorker: createShader failed');
+    return null;
+  }
+  ctx.shaderSource(sh, src);
+  ctx.compileShader(sh);
+  if (!ctx.getShaderParameter(sh, ctx.COMPILE_STATUS)) {
+    console.error('particleWorker: shader compile error:', ctx.getShaderInfoLog(sh));
+    ctx.deleteShader(sh);
+    return null;
+  }
+  return sh;
+}
+
+function buildProgram(ctx: WebGLRenderingContext): WebGLProgram | null {
+  const vs = compileShader(ctx, ctx.VERTEX_SHADER, VERT_SRC);
+  const fs = compileShader(ctx, ctx.FRAGMENT_SHADER, FRAG_SRC);
+  if (!vs || !fs) return null;
+  const prog = ctx.createProgram();
+  if (!prog) {
+    console.error('particleWorker: createProgram failed');
+    return null;
+  }
+  ctx.attachShader(prog, vs);
+  ctx.attachShader(prog, fs);
+  ctx.linkProgram(prog);
+  // Shaders can be flagged for deletion after link.
+  ctx.deleteShader(vs);
+  ctx.deleteShader(fs);
+  if (!ctx.getProgramParameter(prog, ctx.LINK_STATUS)) {
+    console.error('particleWorker: program link error:', ctx.getProgramInfoLog(prog));
+    ctx.deleteProgram(prog);
+    return null;
+  }
+  return prog;
+}
+
+function setCanvasSize(canvas: OffscreenCanvas): void {
+  const pw = Math.max(1, Math.round(width * dpr));
+  const ph = Math.max(1, Math.round(height * dpr));
+  canvas.width = pw;
+  canvas.height = ph;
+  if (gl) gl.viewport(0, 0, pw, ph);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+function init(msg: InitMsg): void {
+  width = msg.width;
+  height = msg.height;
+  dpr = msg.dpr;
+  count = 0;
+
+  const ctx = msg.canvas.getContext('webgl', {
+    alpha: true,
+    premultipliedAlpha: false,
+    antialias: false,
+  });
+  if (!ctx) {
+    console.error('particleWorker: failed to acquire webgl context');
+    return;
+  }
+  gl = ctx;
+
+  const prog = buildProgram(ctx);
+  if (!prog) {
+    gl = null;
+    return;
+  }
+  program = prog;
+
+  locPos = ctx.getAttribLocation(prog, 'a_pos');
+  locSize = ctx.getAttribLocation(prog, 'a_size');
+  locColor = ctx.getAttribLocation(prog, 'a_color');
+  locDpr = ctx.getUniformLocation(prog, 'u_dpr');
+
+  vbo = ctx.createBuffer();
+  if (!vbo) {
+    console.error('particleWorker: createBuffer failed');
+    gl = null;
+    return;
+  }
+  ctx.bindBuffer(ctx.ARRAY_BUFFER, vbo);
+  // Preallocate the full dynamic vertex buffer once.
+  ctx.bufferData(ctx.ARRAY_BUFFER, vertexData.byteLength, ctx.DYNAMIC_DRAW);
+
+  ctx.enable(ctx.BLEND);
+  ctx.blendFunc(ctx.SRC_ALPHA, ctx.ONE_MINUS_SRC_ALPHA);
+  ctx.clearColor(0, 0, 0, 0);
+
+  setCanvasSize(msg.canvas);
+
+  // Start the internal render loop. The OffscreenCanvas is reachable via the
+  // gl context, so we don't need to keep a separate reference for rendering.
+  startLoop();
+}
+
+// ── Simulation + render (one frame) ────────────────────────────────────────
+function spawn(dtScale: number): void {
+  if (!bars || !colors) return;
+
+  const isXl = width >= 1280;
+  const vizHeight = isXl ? 280 : 220;
+  const vizBottom = isXl ? -4 : -22;
+  const vizBaseline = height + vizBottom - vizHeight + 180;
+  const vizMaxBarHeight = 180 - 24;
+  const contentLeft = sidebarOpen ? 256 : 0;
+  const contentW = width - contentLeft;
+  const contentCenter = contentLeft + contentW / 2;
+  const halfW = contentW / 2;
+
+  for (let i = 0; i < BAR_COUNT; i++) {
+    const value = bars[i];
+    if (value < 0.2) continue;
+    // Spawn probability scales with dtScale so the spawn *rate per second* stays
+    // constant regardless of frame rate (more frames -> lower per-frame chance).
+    if (Math.random() > value * 0.3 * gain * dtScale) continue;
+
+    const barHeight = value * vizMaxBarHeight;
+    const spawnY = vizBaseline - barHeight;
+
+    const pos = orientation === 'flipped' ? BAR_COUNT - 1 - i : i;
+    const posNorm = pos / BAR_COUNT;
+
+    const speed = (0.5 + value * 3) * gain;
+    const size = (0.8 + value * 1.5) * Math.min(gain, 1.5);
+    const life = 0.5 + value * 0.5;
+    const r = colors[i * 3];
+    const g = colors[i * 3 + 1];
+    const b = colors[i * 3 + 2];
+
+    // One or two x positions depending on mirroring.
+    const xCount = mirrored ? 2 : 1;
+    for (let k = 0; k < xCount; k++) {
+      if (count >= MAX_PARTICLES) return;
+      let baseX: number;
+      if (mirrored) {
+        baseX = k === 0 ? contentCenter + posNorm * halfW : contentCenter - posNorm * halfW;
+      } else {
+        baseX = contentLeft + posNorm * contentW;
+      }
+      const idx = count++;
+      px[idx] = baseX + (Math.random() - 0.5) * 15;
+      py[idx] = spawnY + (Math.random() - 0.5) * 8;
+      pvx[idx] = (Math.random() - 0.5) * 1.2;
+      pvy[idx] = -speed;
+      psize[idx] = size;
+      pr[idx] = r;
+      pg[idx] = g;
+      pb[idx] = b;
+      plife[idx] = life;
+    }
+  }
+}
+
+function renderFrame(dtScale: number): void {
+  const ctx = gl;
+  if (!ctx || !program || !vbo) return;
+
+  ctx.clear(ctx.COLOR_BUFFER_BIT);
+
+  // No-op render (cleared frame) until we have both bars and colors.
+  if (!bars || !colors) return;
+
+  spawn(dtScale);
+
+  // Update + compact (swap-and-pop style) while building the vertex buffer.
+  // All per-frame deltas are scaled by dtScale for frame-rate independence.
+  let write = 0;
+  let v = 0;
+  for (let i = 0; i < count; i++) {
+    const x = px[i] + pvx[i] * dtScale;
+    const y = py[i] + pvy[i] * dtScale;
+    const life = plife[i] - 0.005 * dtScale;
+    if (life <= 0 || y < -10) continue;
+
+    // Keep the live particle (compact into the write slot).
+    px[write] = x;
+    py[write] = y;
+    pvx[write] = pvx[i];
+    pvy[write] = pvy[i];
+    psize[write] = psize[i];
+    pr[write] = pr[i];
+    pg[write] = pg[i];
+    pb[write] = pb[i];
+    plife[write] = life;
+    write++;
+
+    // Build clip-space vertex.
+    vertexData[v++] = (x / width) * 2 - 1;
+    vertexData[v++] = 1 - (y / height) * 2;
+    vertexData[v++] = psize[i] * 2; // diameter in px; shader scales by dpr
+    vertexData[v++] = pr[i];
+    vertexData[v++] = pg[i];
+    vertexData[v++] = pb[i];
+    vertexData[v++] = life * 0.85;
+  }
+  count = write;
+
+  // Cap stored particle count for next frame (excess already drawn this frame,
+  // matching the 2D version which caps after drawing).
+  const maxParticles = Math.min(MAX_PARTICLES, Math.floor(4000 * Math.max(gain, 1)));
+  if (count > maxParticles) count = maxParticles;
+
+  const drawCount = write;
+  if (drawCount === 0) return;
+
+  ctx.useProgram(program);
+  if (locDpr) ctx.uniform1f(locDpr, dpr);
+
+  ctx.bindBuffer(ctx.ARRAY_BUFFER, vbo);
+  ctx.bufferSubData(ctx.ARRAY_BUFFER, 0, vertexData.subarray(0, drawCount * FLOATS_PER_PARTICLE));
+
+  const stride = FLOATS_PER_PARTICLE * 4;
+  if (locPos >= 0) {
+    ctx.enableVertexAttribArray(locPos);
+    ctx.vertexAttribPointer(locPos, 2, ctx.FLOAT, false, stride, 0);
+  }
+  if (locSize >= 0) {
+    ctx.enableVertexAttribArray(locSize);
+    ctx.vertexAttribPointer(locSize, 1, ctx.FLOAT, false, stride, 2 * 4);
+  }
+  if (locColor >= 0) {
+    ctx.enableVertexAttribArray(locColor);
+    ctx.vertexAttribPointer(locColor, 4, ctx.FLOAT, false, stride, 3 * 4);
+  }
+
+  ctx.drawArrays(ctx.POINTS, 0, drawCount);
+}
+
+function startLoop(): void {
+  // Render at the display's native rate but keep motion frame-rate independent:
+  // every per-frame delta is scaled by dtScale = elapsed / (1000/30), where
+  // 30fps is the reference cadence the original tuning was based on. So at 60Hz
+  // each frame moves half as far but twice as often -> identical real speed.
+  const REF_FRAME_MS = 1000 / 30;
+  let lastTime = 0;
+  // Perf-stats accumulation (posted to the main thread for the HUD ~2x/sec).
+  let statFrames = 0;
+  let statRenderMs = 0;
+  let statWindowStart = 0;
+  const post = (self as unknown as { postMessage: (m: unknown) => void }).postMessage.bind(self);
+  const loop = (now: number) => {
+    rafId = (self as unknown as typeof globalThis).requestAnimationFrame(loop);
+    let dtScale = 1;
+    if (lastTime) {
+      dtScale = (now - lastTime) / REF_FRAME_MS;
+      if (dtScale > 3) dtScale = 3; // clamp huge gaps (tab refocus) to avoid teleporting
+      else if (dtScale <= 0) dtScale = 1;
+    }
+    lastTime = now;
+
+    const t0 = performance.now();
+    renderFrame(dtScale);
+    statRenderMs += performance.now() - t0;
+    statFrames++;
+    if (statWindowStart === 0) {
+      statWindowStart = now;
+    } else if (now - statWindowStart >= 500) {
+      post({
+        type: 'stats',
+        fps: Math.round((statFrames * 1000) / (now - statWindowStart)),
+        frameMs: statRenderMs / statFrames,
+        count,
+      });
+      statFrames = 0;
+      statRenderMs = 0;
+      statWindowStart = now;
+    }
+  };
+  rafId = (self as unknown as typeof globalThis).requestAnimationFrame(loop);
+}
+
+// ── Teardown ───────────────────────────────────────────────────────────────
+function stop(): void {
+  if (rafId) {
+    (self as unknown as typeof globalThis).cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+  if (gl) {
+    if (vbo) gl.deleteBuffer(vbo);
+    if (program) gl.deleteProgram(program);
+    const lose = gl.getExtension('WEBGL_lose_context');
+    if (lose) lose.loseContext();
+  }
+  gl = null;
+  program = null;
+  vbo = null;
+  bars = null;
+  colors = null;
+  count = 0;
+}
+
+// ── Message dispatch ───────────────────────────────────────────────────────
+self.onmessage = (event: MessageEvent<IncomingMsg>) => {
+  const msg = event.data;
+  switch (msg.type) {
+    case 'init':
+      init(msg);
+      break;
+    case 'colors':
+      colors = msg.rgb;
+      break;
+    case 'frame':
+      // Store latest state only — the rAF loop renders from it.
+      bars = msg.bars;
+      gain = msg.gain;
+      mirrored = msg.mirrored;
+      orientation = msg.orientation;
+      sidebarOpen = msg.sidebarOpen;
+      width = msg.width;
+      height = msg.height;
+      break;
+    case 'resize': {
+      width = msg.width;
+      height = msg.height;
+      dpr = msg.dpr;
+      if (gl) {
+        const canvas = gl.canvas as OffscreenCanvas;
+        setCanvasSize(canvas);
+      }
+      break;
+    }
+    case 'stop':
+      stop();
+      break;
+  }
+};
