@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback, type RefObject } from 'react';
 import { useVisualizerStore, type VisualizerOrientation } from '../stores/visualizerStore';
 import { useUIStore } from '../stores/uiStore';
+import { usePlaybackStore } from '../stores/playbackStore';
 import { BeatDetector } from '../lib/beatDetector';
 import { barHeights, barColors } from '../hooks/useVisualizer';
 
@@ -25,9 +26,14 @@ function getThemeColors(): { primary: string; secondary: string; tertiary: strin
   return cachedColors;
 }
 
+// Reused across frames — reallocated only if the analyser's bin count changes.
+let freqBuf: Uint8Array<ArrayBuffer> | null = null;
+
 function getFrequencyData(analyser: AnalyserNode | null): { bass: number; mid: number; high: number; overall: number } {
   if (!analyser) return { bass: 0, mid: 0, high: 0, overall: 0 };
-  const data = new Uint8Array(analyser.frequencyBinCount);
+  const n = analyser.frequencyBinCount;
+  if (!freqBuf || freqBuf.length !== n) freqBuf = new Uint8Array(n);
+  const data = freqBuf;
   analyser.getByteFrequencyData(data);
   const len = data.length;
   let bassSum = 0, midSum = 0, highSum = 0;
@@ -278,12 +284,22 @@ export function BackgroundEffectCanvas({ analyserRef }: BackgroundEffectProps) {
     beatRef.current = new BeatDetector(analyserRef.current?.frequencyBinCount ?? 128);
 
     let lastFrameTime = 0;
+    let idled = false;
     const frameBudget = 1000 / 30; // 30fps target
 
     const draw = (now: number) => {
       animRef.current = requestAnimationFrame(draw);
 
-      if (document.hidden) return;
+      // Battery: idle when hidden or audio is paused. Clear once so no stale
+      // frame is left frozen, then stop doing per-frame work.
+      if (document.hidden || !usePlaybackStore.getState().isPlaying) {
+        if (!idled) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          idled = true;
+        }
+        return;
+      }
+      idled = false;
 
       // Throttle to ~30fps — background effects don't need 60fps
       if (now - lastFrameTime < frameBudget) return;
