@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { barHeights, barColors } from '../../hooks/useVisualizer';
+import { usePlaybackStore } from '../../stores/playbackStore';
 
 interface MiniVizProps {
   className?: string;
@@ -23,10 +24,19 @@ export function MiniViz({ className, bars = 20 }: MiniVizProps) {
     const bw = W / bars;
     let raf = 0;
     let last = 0;
+    let idled = false;
 
     const draw = (now: number) => {
       raf = requestAnimationFrame(draw);
-      if (document.hidden) return;
+      // Battery: idle when hidden or audio is paused; clear once on entering idle.
+      if (document.hidden || !usePlaybackStore.getState().isPlaying) {
+        if (!idled) {
+          ctx.clearRect(0, 0, W, H);
+          idled = true;
+        }
+        return;
+      }
+      idled = false;
       if (now - last < 1000 / 30) return;
       last = now;
 

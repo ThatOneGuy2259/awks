@@ -3,6 +3,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { getAllThemes } from '../stores/customThemeStore';
 import { hexToHSL } from '../lib/colorUtils';
 import { useVisualizerStore, BAND_COUNT } from '../stores/visualizerStore';
+import { usePlaybackStore } from '../stores/playbackStore';
 import { audioMetrics, updateAudioMetrics } from '../lib/audioMetrics';
 
 // Shared bar data for other systems (particles, mini-viz) to read each frame.
@@ -302,10 +303,20 @@ export function useVisualizer(
     };
 
     let lastDraw = 0;
+    let idled = false;
 
     const draw = () => {
       animFrameRef.current = requestAnimationFrame(draw);
-      if (document.hidden) return;
+      // Battery: stop all render work when hidden or audio is paused. Wipe the
+      // canvas once on entering idle so no partial spectrum is left frozen.
+      if (document.hidden || !usePlaybackStore.getState().isPlaying) {
+        if (!idled) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          idled = true;
+        }
+        return;
+      }
+      idled = false;
 
       const analyser = analyserRef.current;
       if (!analyser) return;

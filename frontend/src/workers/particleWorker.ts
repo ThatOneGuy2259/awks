@@ -29,7 +29,6 @@ interface FrameMsg {
   mirrored: boolean;
   orientation: Orientation;
   sidebarOpen: boolean;
-  constellations?: boolean;
   width: number;
   height: number;
 }
@@ -42,7 +41,13 @@ interface ResizeMsg {
 interface StopMsg {
   type: 'stop';
 }
-type IncomingMsg = InitMsg | ColorsMsg | FrameMsg | ResizeMsg | StopMsg;
+interface PauseMsg {
+  type: 'pause';
+}
+interface ResumeMsg {
+  type: 'resume';
+}
+type IncomingMsg = InitMsg | ColorsMsg | FrameMsg | ResizeMsg | StopMsg | PauseMsg | ResumeMsg;
 
 // ── Constants matching the 2D implementation ───────────────────────────────
 const BAR_COUNT = 128;
@@ -78,25 +83,6 @@ void main() {
 }
 `;
 
-// Constellation line shaders — plain colored segments (#19).
-const VERT_LINE_SRC = `
-attribute vec2 a_pos;
-attribute vec4 a_color;
-varying vec4 v_color;
-void main() {
-  gl_Position = vec4(a_pos, 0.0, 1.0);
-  v_color = a_color;
-}
-`;
-
-const FRAG_LINE_SRC = `
-precision mediump float;
-varying vec4 v_color;
-void main() {
-  gl_FragColor = vec4(v_color.rgb, v_color.a);
-}
-`;
-
 // ── Worker-local state ─────────────────────────────────────────────────────
 let gl: WebGLRenderingContext | null = null;
 let program: WebGLProgram | null = null;
@@ -107,20 +93,6 @@ let locPos = -1;
 let locSize = -1;
 let locColor = -1;
 let locDpr: WebGLUniformLocation | null = null;
-
-// Constellation (lines) pass.
-let progLine: WebGLProgram | null = null;
-let vboLine: WebGLBuffer | null = null;
-let locLinePos = -1;
-let locLineColor = -1;
-let constellations = false;
-const FLOATS_PER_LINE_VERT = 6; // x, y (clip), r, g, b, a
-const MAX_EDGES = 12000;
-const lineData = new Float32Array(MAX_EDGES * 2 * FLOATS_PER_LINE_VERT);
-// Uniform-grid neighbour search to keep line building ~O(n·k) instead of O(n²).
-let cellHead: Int32Array | null = null;
-let cellEdges: Int32Array | null = null; // per-cell edge count for area-density cap
-const cellNext = new Int32Array(MAX_PARTICLES);
 
 let dpr = 1;
 let width = 0; // logical (CSS) px — used for layout + clip-space math
@@ -244,19 +216,6 @@ function init(msg: InitMsg): void {
   // Preallocate the full dynamic vertex buffer once.
   ctx.bufferData(ctx.ARRAY_BUFFER, vertexData.byteLength, ctx.DYNAMIC_DRAW);
 
-  // Constellation line program + buffer.
-  progLine = buildProgram(ctx, VERT_LINE_SRC, FRAG_LINE_SRC);
-  if (progLine) {
-    locLinePos = ctx.getAttribLocation(progLine, 'a_pos');
-    locLineColor = ctx.getAttribLocation(progLine, 'a_color');
-    vboLine = ctx.createBuffer();
-    if (vboLine) {
-      ctx.bindBuffer(ctx.ARRAY_BUFFER, vboLine);
-      ctx.bufferData(ctx.ARRAY_BUFFER, lineData.byteLength, ctx.DYNAMIC_DRAW);
-      ctx.bindBuffer(ctx.ARRAY_BUFFER, vbo);
-    }
-  }
-
   ctx.enable(ctx.BLEND);
   ctx.blendFunc(ctx.SRC_ALPHA, ctx.ONE_MINUS_SRC_ALPHA);
   ctx.clearColor(0, 0, 0, 0);
@@ -299,7 +258,7 @@ function spawn(dtScale: number): void {
     for (let i = 0; i < BAR_COUNT; i++) {
       const value = bars[i];
       if (value < 0.2) continue;
-      if (Math.random() > value * 0.3 * gain * dtScale * qualityScale) continue;
+      if (Math.random() > value * 0.3 * gain * dtScale) continue;
       const pos = orientation === 'flipped' ? BAR_COUNT - 1 - i : i;
       const r = innerR + value * span;
       const speed = (0.4 + value * 2) * gain;
@@ -335,7 +294,7 @@ function spawn(dtScale: number): void {
     const scopeCenter = vizBaseline - (isXl ? 88 : 69);
     const SCOPE_AMP = isXl ? 70 : 55;
     for (let i = 0; i < BAR_COUNT; i++) {
-      if (Math.random() > 0.06 * gain * dtScale * qualityScale) continue;
+      if (Math.random() > 0.06 * gain * dtScale) continue;
       if (count >= MAX_PARTICLES) return;
       const x = contentLeft + (i / (BAR_COUNT - 1)) * contentW;
       const y = scopeCenter + wave[i] * SCOPE_AMP;
@@ -358,7 +317,7 @@ function spawn(dtScale: number): void {
     if (value < 0.2) continue;
     // Spawn probability scales with dtScale so the spawn *rate per second* stays
     // constant regardless of frame rate (more frames -> lower per-frame chance).
-    if (Math.random() > value * 0.3 * gain * dtScale * qualityScale) continue;
+    if (Math.random() > value * 0.3 * gain * dtScale) continue;
 
     const barHeight = value * vizMaxBarHeight;
     const spawnY = vizBaseline - barHeight;
@@ -443,14 +402,14 @@ function renderFrame(dtScale: number): void {
 
   // Cap stored particle count for next frame (excess already drawn this frame,
   // matching the 2D version which caps after drawing).
-  const maxParticles = Math.min(MAX_PARTICLES, Math.floor(4000 * Math.max(gain, 1) * qualityScale));
+  // Population is intensity-driven, NOT perf-scaled — otherwise the count (and so
+  // the whole look) differs wildly between GPUs/engines (e.g. Chrome at quality 1
+  // vs Firefox throttled to 0.4). qualityScale is reported to the perf HUD only.
+  const maxParticles = Math.min(MAX_PARTICLES, Math.floor(4000 * Math.max(gain, 1)));
   if (count > maxParticles) count = maxParticles;
 
   const drawCount = write;
   if (drawCount === 0) return;
-
-  // Draw connecting lines first so particles render on top of them.
-  if (constellations) drawConstellations(ctx);
 
   ctx.useProgram(program);
   if (locDpr) ctx.uniform1f(locDpr, dpr);
@@ -473,113 +432,6 @@ function renderFrame(dtScale: number): void {
   }
 
   ctx.drawArrays(ctx.POINTS, 0, drawCount);
-}
-
-// ── Constellation lines (#19) ────────────────────────────────────────────────
-// Uniform-grid neighbour search: bucket live particles into threshold-sized
-// cells, then connect each particle only to particles in its 9 neighbouring
-// cells. Keeps the work ~O(n·k) so it stays in budget at a few thousand nodes.
-function drawConstellations(ctx: WebGLRenderingContext): void {
-  if (!progLine || !vboLine || count < 2) return;
-  const threshold = 150 * qualityScale;
-  if (threshold < 1) return;
-  const inv = 1 / threshold;
-  const thr2 = threshold * threshold;
-  const cell = threshold;
-  const cols = Math.max(1, Math.ceil(width / cell));
-  const rows = Math.max(1, Math.ceil(height / cell));
-  const nCells = cols * rows;
-  if (!cellHead || cellHead.length < nCells) cellHead = new Int32Array(nCells);
-  if (!cellEdges || cellEdges.length < nCells) cellEdges = new Int32Array(nCells);
-  cellHead.fill(-1, 0, nCells);
-  cellEdges.fill(0, 0, nCells);
-
-  for (let i = 0; i < count; i++) {
-    let cxg = (px[i] / cell) | 0;
-    let cyg = (py[i] / cell) | 0;
-    if (cxg < 0) cxg = 0; else if (cxg >= cols) cxg = cols - 1;
-    if (cyg < 0) cyg = 0; else if (cyg >= rows) cyg = rows - 1;
-    const ci = cyg * cols + cxg;
-    cellNext[i] = cellHead[ci];
-    cellHead[ci] = i;
-  }
-
-  // Generous caps — just perf/pathological-density safety. The spread "web" look
-  // comes from many lines; opacity is controlled by low per-line alpha, not caps.
-  const MAX_PER_NODE = 12;
-  const MAX_PER_CELL = 40;
-  let li = 0;
-  let edges = 0;
-  for (let i = 0; i < count && edges < MAX_EDGES; i++) {
-    const xi = px[i];
-    const yi = py[i];
-    let cxg = (xi / cell) | 0;
-    let cyg = (yi / cell) | 0;
-    if (cxg < 0) cxg = 0; else if (cxg >= cols) cxg = cols - 1;
-    if (cyg < 0) cyg = 0; else if (cyg >= rows) cyg = rows - 1;
-    const ci = cyg * cols + cxg;
-    if (cellEdges[ci] >= MAX_PER_CELL) continue; // area already at capacity
-    const r = pr[i];
-    const g = pg[i];
-    const b = pb[i];
-    let iEdges = 0;
-    neighbors:
-    for (let gy = cyg - 1; gy <= cyg + 1; gy++) {
-      if (gy < 0 || gy >= rows) continue;
-      for (let gx = cxg - 1; gx <= cxg + 1; gx++) {
-        if (gx < 0 || gx >= cols) continue;
-        let j = cellHead[gy * cols + gx];
-        while (j !== -1) {
-          if (j > i) {
-            const dx = px[j] - xi;
-            const dy = py[j] - yi;
-            const d2 = dx * dx + dy * dy;
-            if (d2 < thr2) {
-              const alpha = (1 - Math.sqrt(d2) * inv) * 0.42 * qualityScale;
-              if (alpha >= 0.02 && edges < MAX_EDGES) {
-                lineData[li++] = (xi / width) * 2 - 1;
-                lineData[li++] = 1 - (yi / height) * 2;
-                lineData[li++] = r; lineData[li++] = g; lineData[li++] = b; lineData[li++] = alpha;
-                lineData[li++] = (px[j] / width) * 2 - 1;
-                lineData[li++] = 1 - (py[j] / height) * 2;
-                lineData[li++] = r; lineData[li++] = g; lineData[li++] = b; lineData[li++] = alpha;
-                edges++;
-                cellEdges[ci]++;
-                if (++iEdges >= MAX_PER_NODE || cellEdges[ci] >= MAX_PER_CELL) break neighbors;
-              }
-            }
-          }
-          j = cellNext[j];
-        }
-      }
-    }
-  }
-
-  if (edges === 0) return;
-  ctx.useProgram(progLine);
-  ctx.bindBuffer(ctx.ARRAY_BUFFER, vboLine);
-  ctx.bufferSubData(ctx.ARRAY_BUFFER, 0, lineData.subarray(0, li));
-
-  // Reset vertex-attrib array state left enabled by the point pass. Strict GL
-  // drivers (Firefox, real-GPU ANGLE/Chrome) reject a draw if ANY enabled array —
-  // even one this program ignores — is bound to a buffer too small for the vertex
-  // count. The leftover point a_color array points at the smaller particle buffer,
-  // so the LINES draw (more vertices) gets rejected. SwiftShader (Playwright) is
-  // lenient, which is why it only broke in real browsers. Clear, then enable ours.
-  ctx.disableVertexAttribArray(locPos);
-  if (locSize >= 0) ctx.disableVertexAttribArray(locSize);
-  if (locColor >= 0) ctx.disableVertexAttribArray(locColor);
-
-  const stride = FLOATS_PER_LINE_VERT * 4;
-  if (locLinePos >= 0) {
-    ctx.enableVertexAttribArray(locLinePos);
-    ctx.vertexAttribPointer(locLinePos, 2, ctx.FLOAT, false, stride, 0);
-  }
-  if (locLineColor >= 0) {
-    ctx.enableVertexAttribArray(locLineColor);
-    ctx.vertexAttribPointer(locLineColor, 4, ctx.FLOAT, false, stride, 2 * 4);
-  }
-  ctx.drawArrays(ctx.LINES, 0, edges * 2);
 }
 
 function startLoop(): void {
@@ -633,6 +485,23 @@ function startLoop(): void {
   rafId = (self as unknown as typeof globalThis).requestAnimationFrame(loop);
 }
 
+// ── Pause / resume ───────────────────────────────────────────────────────────
+// Battery: the driver on the main thread stops feeding frames and asks us to
+// idle when the tab is hidden or audio is paused. Cancel our rAF entirely (zero
+// GPU work) and clear the canvas so no stale particle frame is left frozen.
+function pause(): void {
+  if (rafId) {
+    (self as unknown as typeof globalThis).cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+  if (gl) gl.clear(gl.COLOR_BUFFER_BIT);
+}
+
+function resume(): void {
+  // Only re-arm if we're initialised and not already looping.
+  if (!rafId && gl && program) startLoop();
+}
+
 // ── Teardown ───────────────────────────────────────────────────────────────
 function stop(): void {
   if (rafId) {
@@ -672,7 +541,6 @@ self.onmessage = (event: MessageEvent<IncomingMsg>) => {
       mirrored = msg.mirrored;
       orientation = msg.orientation;
       sidebarOpen = msg.sidebarOpen;
-      constellations = !!msg.constellations;
       width = msg.width;
       height = msg.height;
       break;
@@ -686,6 +554,12 @@ self.onmessage = (event: MessageEvent<IncomingMsg>) => {
       }
       break;
     }
+    case 'pause':
+      pause();
+      break;
+    case 'resume':
+      resume();
+      break;
     case 'stop':
       stop();
       break;

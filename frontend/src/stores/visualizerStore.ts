@@ -39,7 +39,6 @@ export interface VizPreset {
   beatReactivity: number;
   trails: boolean;
   hueDrift: boolean;
-  constellations: boolean;
 }
 
 interface VisualizerState {
@@ -71,11 +70,9 @@ interface VisualizerState {
   beatReactivity: number; // 0..1 — scales the beat-pulse effect
   trails: boolean;        // motion-blur ghost trails
   hueDrift: boolean;      // slow color rotation even on steady audio
-  constellations: boolean; // faint lines between nearby particles
   setBeatReactivity: (v: number) => void;
   setTrails: (v: boolean) => void;
   setHueDrift: (v: boolean) => void;
-  setConstellations: (v: boolean) => void;
 
   // Background effect
   backgroundEffect: BackgroundEffect;
@@ -121,7 +118,6 @@ interface PersistedState {
   beatReactivity?: number;
   trails?: boolean;
   hueDrift?: boolean;
-  constellations?: boolean;
   backgroundEffect?: BackgroundEffect;
   backgroundIntensity?: number;
   miniViz?: boolean;
@@ -178,7 +174,6 @@ function getPersistedSnapshot(get: () => VisualizerState): Persisted {
     beatReactivity: s.beatReactivity,
     trails: s.trails,
     hueDrift: s.hueDrift,
-    constellations: s.constellations,
     backgroundEffect: s.backgroundEffect,
     backgroundIntensity: s.backgroundIntensity,
     miniViz: s.miniViz,
@@ -207,7 +202,6 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
   beatReactivity: typeof saved.beatReactivity === 'number' ? saved.beatReactivity : 1.0,
   trails: saved.trails ?? false,
   hueDrift: saved.hueDrift ?? false,
-  constellations: saved.constellations ?? false,
   backgroundEffect: saved.backgroundEffect ?? 'none',
   backgroundIntensity: saved.backgroundIntensity ?? 1.0,
   miniViz: saved.miniViz ?? true,
@@ -276,7 +270,6 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
   setBeatReactivity: (v) => { set({ beatReactivity: v }); persistAll({ ...getPersistedSnapshot(get), beatReactivity: v }); },
   setTrails: (v) => { set({ trails: v }); persistAll({ ...getPersistedSnapshot(get), trails: v }); },
   setHueDrift: (v) => { set({ hueDrift: v }); persistAll({ ...getPersistedSnapshot(get), hueDrift: v }); },
-  setConstellations: (v) => { set({ constellations: v }); persistAll({ ...getPersistedSnapshot(get), constellations: v }); },
   setBackgroundEffect: (v) => { set({ backgroundEffect: v }); persistAll({ ...getPersistedSnapshot(get), backgroundEffect: v }); },
   setBackgroundIntensity: (v) => { set({ backgroundIntensity: v }); persistAll({ ...getPersistedSnapshot(get), backgroundIntensity: v }); },
   setMiniViz: (v) => { set({ miniViz: v }); persistAll({ ...getPersistedSnapshot(get), miniViz: v }); },
@@ -298,7 +291,6 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
       beatReactivity: s.beatReactivity,
       trails: s.trails,
       hueDrift: s.hueDrift,
-      constellations: s.constellations,
     };
     const presets = [...get().presets, preset];
     set({ presets });
@@ -318,7 +310,6 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
       beatReactivity: preset.beatReactivity,
       trails: preset.trails,
       hueDrift: preset.hueDrift,
-      constellations: preset.constellations,
     };
     set(patch);
     persistAll({ ...getPersistedSnapshot(get), ...patch });
@@ -356,7 +347,6 @@ export const useVisualizerStore = create<VisualizerState>((set, get) => ({
         beatReactivity: typeof p.beatReactivity === 'number' ? p.beatReactivity : 1.0,
         trails: !!p.trails,
         hueDrift: !!p.hueDrift,
-        constellations: !!p.constellations,
       };
       const presets = [...get().presets, preset];
       set({ presets });

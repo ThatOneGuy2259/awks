@@ -2,6 +2,7 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { useVisualizerStore } from '../stores/visualizerStore';
 import { useUIStore } from '../stores/uiStore';
 import { usePerfStore } from '../stores/perfStore';
+import { usePlaybackStore } from '../stores/playbackStore';
 import { barHeights, barColors, waveform } from '../hooks/useVisualizer';
 
 interface ParticleGLBackgroundProps {
@@ -90,11 +91,25 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
     let lastColorKey = '';
     let rafId = 0;
     let lastFrameTime = 0;
+    let idle = false;
     const frameBudget = 1000 / 30; // light main-thread cadence; worker renders at full rate
 
     const loop = (now: number) => {
       rafId = requestAnimationFrame(loop);
-      if (document.hidden) return;
+      // Battery: idle when the tab is hidden or audio is paused. Tell the worker
+      // to cancel its own rAF (true GPU-idle) rather than just skipping frames.
+      const paused = document.hidden || !usePlaybackStore.getState().isPlaying;
+      if (paused) {
+        if (!idle) {
+          idle = true;
+          worker.postMessage({ type: 'pause' });
+        }
+        return;
+      }
+      if (idle) {
+        idle = false;
+        worker.postMessage({ type: 'resume' });
+      }
       if (now - lastFrameTime < frameBudget) return;
       lastFrameTime = now;
 
@@ -106,7 +121,7 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
 
       const bars = new Float32Array(BAR_COUNT);
       bars.set(barHeights);
-      const { mirrored, orientation, visualizerMode, constellations, reduceVisuals } = useVisualizerStore.getState();
+      const { mirrored, orientation, visualizerMode } = useVisualizerStore.getState();
       const sidebarOpen = window.innerWidth > 1024 && !useUIStore.getState().sidebarCollapsed;
       const transfer: Transferable[] = [bars.buffer];
       let wave: Float32Array | undefined;
@@ -125,7 +140,6 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
           mirrored,
           orientation,
           sidebarOpen,
-          constellations: constellations && !reduceVisuals,
           width: window.innerWidth,
           height: window.innerHeight,
         },
@@ -139,9 +153,22 @@ export function ParticleGLBackground({ analyserRef: _analyserRef }: ParticleGLBa
     };
     window.addEventListener('resize', onResize);
 
+    // rAF callbacks don't fire while the tab is hidden, so the in-loop hidden
+    // check can't catch the hide transition — the worker's own rAF would keep
+    // rendering. visibilitychange DOES fire, so pause the worker explicitly here.
+    // Resume is handled by the loop once it starts running again on re-show.
+    const onVisibility = () => {
+      if (document.hidden && !idle) {
+        idle = true;
+        worker.postMessage({ type: 'pause' });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', onResize);
+      document.removeEventListener('visibilitychange', onVisibility);
       worker.postMessage({ type: 'stop' });
       worker.terminate();
       usePerfStore.getState().clearWorker();

@@ -45,6 +45,7 @@ export class BeatDetector {
   private high = new BandEnvelope();   // bins 9-40: 1550-7000Hz (hats, clicks, transients)
 
   private prevSpectrum: Float32Array;
+  private data: Uint8Array<ArrayBuffer>; // reused each frame to avoid per-frame allocation
   private lastKickTime = 0;
 
   // Output values for visuals
@@ -54,6 +55,7 @@ export class BeatDetector {
 
   constructor(binCount: number) {
     this.prevSpectrum = new Float32Array(binCount);
+    this.data = new Uint8Array(binCount);
   }
 
   update(analyser: AnalyserNode | null, now: number) {
@@ -63,7 +65,10 @@ export class BeatDetector {
       return;
     }
 
-    const data = new Uint8Array(analyser.frequencyBinCount);
+    let data = this.data;
+    if (data.length !== analyser.frequencyBinCount) {
+      data = this.data = new Uint8Array(analyser.frequencyBinCount);
+    }
     analyser.getByteFrequencyData(data);
     const bins = data.length;
 
