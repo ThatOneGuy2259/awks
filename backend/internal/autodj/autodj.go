@@ -17,8 +17,7 @@ import (
 )
 
 var playlistURLs = []string{
-	"https://music.youtube.com/watch?v=LJNiMJvnxT0&list=OLAK5uy_l9tVtOqp3cp8P_ajvkbPEpNdBbkSHzIP8",
-	"https://music.youtube.com/playlist?list=OLAK5uy_nqZhqerW6fOvpJVbVB9yWMbnpDcJ6wz80",
+	"https://www.youtube.com/playlist?list=PLPLtkbI_mC6ynNFLa7NfZS1WXooNZMhuM",
 }
 
 // blacklistedVideoIDs are tracks that should never be picked by the auto-DJ,
