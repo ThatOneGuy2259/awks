@@ -95,7 +95,7 @@ func (h *AdminHandler) MoveToTop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.queries.MoveToTop(r.Context(), id)
-	h.hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+	h.hub.Broadcast(service.QueueUpdateMessage(r.Context(), h.queries))
 	w.WriteHeader(http.StatusNoContent)
 }
 

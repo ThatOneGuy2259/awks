@@ -124,7 +124,7 @@ func main() {
 			go playbackSvc.AdvanceQueue(context.Background())
 		}
 	}, func() {
-		hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+		hub.Broadcast(service.QueueUpdateMessage(context.Background(), queries))
 	})
 
 	// Wire up next-track preloading
@@ -194,7 +194,7 @@ func main() {
 			return false
 		}
 		log.Printf("[auto-dj] queued: %s - %s", title, artist)
-		hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+		hub.Broadcast(service.QueueUpdateMessage(context.Background(), queries))
 
 		// Tempo detection is ~1s — do it off the auto-DJ path. The track plays
 		// later (after the current one), so BPM lands well before it's needed.
@@ -204,7 +204,7 @@ func main() {
 					ID:  id,
 					Bpm: sql.NullFloat64{Float64: bpm, Valid: true},
 				})
-				hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+				hub.Broadcast(service.QueueUpdateMessage(context.Background(), queries))
 			}
 		}(queueID, filePath)
 		return true

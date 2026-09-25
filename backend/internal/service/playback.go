@@ -109,6 +109,7 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 				Type: "TRACK_CHANGE",
 				Data: model.TrackChangeData{VideoID: ""},
 			})
+			s.wsbroadcast(QueueUpdateMessage(ctx, s.queries))
 			return
 		}
 	}
@@ -156,6 +157,8 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 			Bpm:            state.Bpm,
 		},
 	})
+	// The queue changed too (previous track played, this one playing).
+	s.wsbroadcast(QueueUpdateMessage(ctx, s.queries))
 
 	// Wake the broadcaster — it will pick up the new track
 	s.broadcaster.Wake()

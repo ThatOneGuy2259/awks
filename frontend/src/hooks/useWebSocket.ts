@@ -177,13 +177,18 @@ function handleMessage(msg: { type: string; data: unknown }) {
         });
       }
       useSkipVoteStore.getState().reset();
-      api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
+      // The server follows every TRACK_CHANGE with a QUEUE_UPDATE carrying the queue.
       break;
     }
     case 'SYNC':
       break;
     case 'QUEUE_UPDATE':
-      api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
+      // The server sends the queue inline; refetch only if it couldn't load it.
+      if (Array.isArray(data)) {
+        useQueueStore.getState().setTracks(data);
+      } else {
+        api.getQueue().then((tracks) => useQueueStore.getState().setTracks(tracks)).catch(() => {});
+      }
       break;
     case 'SKIP_VOTE_UPDATE': {
       const d = data as { queue_id: string; votes: number; votes_required: number };

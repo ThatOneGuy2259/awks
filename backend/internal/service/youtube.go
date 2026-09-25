@@ -200,14 +200,11 @@ func SearchYouTubeYtdlp(query, ytdlpPath string) ([]SearchResult, error) {
 			continue
 		}
 		var entry struct {
-			ID         string  `json:"id"`
-			Title      string  `json:"title"`
-			Uploader   string  `json:"uploader"`
-			Channel    string  `json:"channel"`
-			Duration   float64 `json:"duration"`
-			Thumbnails []struct {
-				URL string `json:"url"`
-			} `json:"thumbnails"`
+			ID       string  `json:"id"`
+			Title    string  `json:"title"`
+			Uploader string  `json:"uploader"`
+			Channel  string  `json:"channel"`
+			Duration float64 `json:"duration"`
 		}
 		if err := json.Unmarshal(line, &entry); err != nil {
 			continue
@@ -219,10 +216,9 @@ func SearchYouTubeYtdlp(query, ytdlpPath string) ([]SearchResult, error) {
 		if artist == "" {
 			artist = entry.Uploader
 		}
-		thumb := fmt.Sprintf("https://img.youtube.com/vi/%s/hqdefault.jpg", entry.ID)
-		if len(entry.Thumbnails) > 0 {
-			thumb = entry.Thumbnails[len(entry.Thumbnails)-1].URL
-		}
+		// mqdefault (320x180, ~10 KB) is enough for the search cards. yt-dlp's
+		// largest thumbnail is hq720 at ~65 KB, times 12 results per search.
+		thumb := fmt.Sprintf("https://i.ytimg.com/vi/%s/mqdefault.jpg", entry.ID)
 		results = append(results, SearchResult{
 			VideoID:      entry.ID,
 			Title:        entry.Title,
