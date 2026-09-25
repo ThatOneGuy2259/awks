@@ -265,6 +265,11 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
             {/* ── Audio ───────────────────────────────────────────────── */}
             {section === 'audio' && (
               <div className="space-y-4 max-w-2xl">
+                {reduceVisuals ? (
+                  <div className="rounded-xl bg-surface-container-lowest p-5 text-sm text-on-surface-variant">
+                    The EQ is off while Reduce visuals is on. Turn it off under Performance to shape the sound again.
+                  </div>
+                ) : (
                 <div className="rounded-xl bg-surface-container-lowest p-5">
                   <EqControls
                     title="Audio EQ"
@@ -276,6 +281,7 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
                     onImport={importAudioEQ}
                   />
                 </div>
+                )}
                 <p className="text-xs text-on-surface-variant/70 px-1">
                   Visualizer sensitivity and on-screen effects live in the Visualizer Studio
                   (the <span className="material-symbols-outlined text-[13px] align-middle">equalizer</span> icon in the player bar) so you can watch changes as you make them.
@@ -318,7 +324,7 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
                     </span>
                   </button>
                   <p className="mt-2 text-xs text-on-surface-variant">
-                    Calmer, lighter visuals for low-power devices — disables background effects, trails, hue drift, and beat flashes.
+                    Strips the app down to music, queue, and chat for low-power devices. Turns off the visualizer, background effects, reactions, and the EQ, and plays audio without Web Audio processing.
                   </p>
                 </div>
               </div>
