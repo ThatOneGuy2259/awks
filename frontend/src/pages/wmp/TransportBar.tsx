@@ -1,6 +1,6 @@
 import { usePlaybackStore } from '../../stores/playbackStore';
 import { useSkipVoteStore } from '../../stores/skipVoteStore';
-import { api } from '../../lib/api';
+import { toggleSkipVote } from '../../lib/skipVote';
 
 interface TransportBarProps {
   volume: number;
@@ -14,17 +14,7 @@ export function TransportBar({ volume, setVolume }: TransportBarProps) {
 
   const handleSkipVote = async () => {
     if (!track) return;
-    try {
-      if (votedByMe) {
-        await api.retractSkipVote(track.queueId);
-        useSkipVoteStore.getState().setVotedByMe(false);
-      } else {
-        await api.castSkipVote(track.queueId);
-        useSkipVoteStore.getState().setVotedByMe(true);
-      }
-    } catch (err) {
-      console.error('vote skip error:', err);
-    }
+    await toggleSkipVote(track.queueId);
   };
 
   return (

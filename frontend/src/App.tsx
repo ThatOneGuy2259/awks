@@ -13,6 +13,7 @@ const SearchRequestView = lazyWithRetry(() => import('./pages/SearchRequestView'
 const AdminDashboardView = lazyWithRetry(() => import('./pages/AdminDashboardView').then(m => ({ default: m.AdminDashboardView })));
 const HistoryView = lazyWithRetry(() => import('./pages/HistoryView').then(m => ({ default: m.HistoryView })));
 const WmpPage = lazyWithRetry(() => import('./pages/wmp/WmpPage').then(m => ({ default: m.WmpPage })));
+const ListenPage = lazyWithRetry(() => import('./pages/ListenPage').then(m => ({ default: m.ListenPage })));
 import { useWebRTC } from './hooks/useWebRTC';
 import { useUIStore } from './stores/uiStore';
 import { setGetTokenFn, api } from './lib/api';
@@ -25,6 +26,7 @@ import { ConnectionBanner } from './components/ConnectionBanner';
 import { AudioBanner } from './components/AudioBanner';
 import { BackgroundLayer } from './components/BackgroundLayer';
 import { EmptyState } from './components/EmptyState';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Apply saved theme on module load (before React renders)
 const startupThemeId = useThemeStore.getState().currentTheme;
@@ -74,14 +76,16 @@ function AppContent() {
         <Route
           path="/wmp"
           element={
-            <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
-              <WmpPage
-                  analyserRef={analyserRef}
-                  audioContextRef={audioContextRef}
-                  volume={volume}
-                  setVolume={setVolume}
-                />
-            </Suspense>
+            <ErrorBoundary>
+              <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
+                <WmpPage
+                    analyserRef={analyserRef}
+                    audioContextRef={audioContextRef}
+                    volume={volume}
+                    setVolume={setVolume}
+                  />
+              </Suspense>
+            </ErrorBoundary>
           }
         />
         <Route
@@ -109,6 +113,7 @@ interface ShellLayoutProps {
 
 function ShellLayout({ volume, setVolume, listening, analyserRef }: ShellLayoutProps) {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
+  const location = useLocation();
 
   return (
     <>
@@ -117,14 +122,17 @@ function ShellLayout({ volume, setVolume, listening, analyserRef }: ShellLayoutP
       <Sidebar listening={listening} />
 
       <main className={`pt-20 pb-44 lg:pb-32 min-h-screen relative z-[2] transition-[padding-left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-64'}`}>
-        <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
-          <Routes>
-            <Route path="/" element={<MusicQueueView />} />
-            <Route path="/search" element={<SearchRequestView />} />
-            <Route path="/history" element={<HistoryView />} />
-            <Route path="/admin" element={<AdminRoute />} />
-          </Routes>
-        </Suspense>
+        {/* Keyed by path so navigating away clears a crashed page. */}
+        <ErrorBoundary key={location.pathname}>
+          <Suspense fallback={<div className="flex items-center justify-center py-24"><div className="w-8 h-8 border-3 border-primary/30 border-t-primary rounded-full animate-spin" /></div>}>
+            <Routes>
+              <Route path="/" element={<MusicQueueView />} />
+              <Route path="/search" element={<SearchRequestView />} />
+              <Route path="/history" element={<HistoryView />} />
+              <Route path="/admin" element={<AdminRoute />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       <PlayerBar volume={volume} onVolumeChange={setVolume} analyserRef={analyserRef} />
@@ -241,16 +249,37 @@ function LoginRouter() {
   return <GoogleOnlyLogin />;
 }
 
-export default function App() {
+// /listen needs no sign-in (TVs and shared screens); everything else does.
+function Root() {
+  const location = useLocation();
+
+  if (location.pathname === '/listen') {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<div className="min-h-screen bg-background" />}>
+          <ListenPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
   return (
-    <BrowserRouter>
-      <ToastContainer />
+    <>
       <SignedIn>
         <AuthenticatedApp />
       </SignedIn>
       <SignedOut>
         <LoginRouter />
       </SignedOut>
+    </>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <ToastContainer />
+      <Root />
     </BrowserRouter>
   );
 }

@@ -102,10 +102,12 @@ func (pm *PeerManager) HandleOffer(clientID string, offerSDP string, sendToClien
 		sendToClient("WEBRTC_ICE_CANDIDATE", json.RawMessage(candidateJSON))
 	})
 
-	// Log connection state changes and clean up on disconnect
+	// Log connection state changes and clean up once the peer is gone.
+	// Disconnected is left alone: ICE often recovers from it on its own after
+	// a brief network blip, and the client rebuilds if it doesn't.
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("[webrtc] peer %s ICE state: %s", clientID, state.String())
-		if state == webrtc.ICEConnectionStateFailed || state == webrtc.ICEConnectionStateDisconnected || state == webrtc.ICEConnectionStateClosed {
+		if state == webrtc.ICEConnectionStateFailed || state == webrtc.ICEConnectionStateClosed {
 			pm.mu.Lock()
 			if pm.peers[clientID] == pc {
 				delete(pm.peers, clientID)

@@ -19,11 +19,34 @@ type Client struct {
 	Username     string
 	Avatar       string
 	OnDisconnect func() // called when client disconnects
+	// ListenOnly clients are signed-out /listen pages: they only receive
+	// playback messages and never count as listeners.
+	ListenOnly bool
+	DeviceID   string // paired listen_devices row, for ListenOnly clients
+	// Per-client limits, only touched from this client's ReadPump goroutine.
+	ChatLimit     *RateLimiter
+	ReactionLimit *RateLimiter
+	OfferLimit    *RateLimiter
+}
+
+// listenOnlyTypes are the broadcast types a ListenOnly client may receive.
+// Chat, reactions and listener lists carry names and stay private.
+var listenOnlyTypes = map[string]bool{
+	"TRACK_CHANGE":   true,
+	"QUEUE_UPDATE":   true,
+	"SYNC":           true,
+	"CROSSFADE_HINT": true,
+	"TRACK_SKIPPED":  true,
+}
+
+type outbound struct {
+	msgType string
+	data    []byte
 }
 
 type Hub struct {
 	clients    map[*Client]bool
-	broadcast  chan []byte
+	broadcast  chan outbound
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
@@ -33,7 +56,7 @@ type Hub struct {
 func NewHub(onChange func()) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
-		broadcast:  make(chan []byte, 256),
+		broadcast:  make(chan outbound, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		onChange:   onChange,
@@ -85,8 +108,11 @@ func (h *Hub) Run() {
 		case message := <-h.broadcast:
 			h.mu.Lock()
 			for client := range h.clients {
+				if client.ListenOnly && !listenOnlyTypes[message.msgType] {
+					continue
+				}
 				select {
-				case client.Send <- message:
+				case client.Send <- message.data:
 				default:
 					h.removeClient(client)
 				}
@@ -110,11 +136,7 @@ func (h *Hub) Broadcast(msg model.WSMessage) {
 		log.Printf("failed to marshal ws message: %v", err)
 		return
 	}
-	h.broadcast <- data
-}
-
-func (h *Hub) BroadcastRaw(data []byte) {
-	h.broadcast <- data
+	h.broadcast <- outbound{msgType: msg.Type, data: data}
 }
 
 // SendToClient sends a message to a specific client by pointer.
@@ -138,6 +160,9 @@ func (h *Hub) GetListeners() []model.Listener {
 	seen := make(map[string]bool)
 	listeners := make([]model.Listener, 0)
 	for client := range h.clients {
+		if client.ListenOnly {
+			continue
+		}
 		if !seen[client.UserID] {
 			seen[client.UserID] = true
 			listeners = append(listeners, model.Listener{
@@ -156,9 +181,57 @@ func (h *Hub) ListenerCount() int {
 
 	seen := make(map[string]bool)
 	for client := range h.clients {
+		if client.ListenOnly {
+			continue
+		}
 		seen[client.UserID] = true
 	}
 	return len(seen)
+}
+
+// ConnectedCount counts every open connection, including listen-only pages.
+// It answers "is anyone hearing the stream", unlike ListenerCount.
+func (h *Hub) ConnectedCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
+}
+
+// DeviceConnected reports whether a paired screen has an open connection.
+func (h *Hub) DeviceConnected(deviceID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.DeviceID == deviceID {
+			return true
+		}
+	}
+	return false
+}
+
+// DisconnectDevice closes an unpaired screen's connections. Its ReadPump then
+// unregisters it, and its reconnect fails the key check.
+func (h *Hub) DisconnectDevice(deviceID string) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for client := range h.clients {
+		if client.DeviceID == deviceID {
+			client.Conn.Close()
+		}
+	}
+}
+
+// ListenOnlyCount counts open listen-only connections.
+func (h *Hub) ListenOnlyCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	n := 0
+	for client := range h.clients {
+		if client.ListenOnly {
+			n++
+		}
+	}
+	return n
 }
 
 func (c *Client) WritePump() {

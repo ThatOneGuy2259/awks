@@ -41,6 +41,11 @@ export const api = {
   addToQueue: (youtube_url: string) =>
     request<QueueTrack>('/api/queue', { method: 'POST', body: JSON.stringify({ youtube_url }) }),
   deleteFromQueue: (id: string) => request<void>(`/api/queue/${id}`, { method: 'DELETE' }),
+  createListenCode: () => request<{ code: string; expires_at: string }>('/api/listen/codes', { method: 'POST' }),
+  pairListen: (code: string) => request<{ token: string }>('/api/listen/pair', { method: 'POST', body: JSON.stringify({ code }) }),
+  getListenDevices: () => request<ListenDevice[]>('/api/listen/devices'),
+  removeListenDevice: (id: string) => request<void>(`/api/listen/devices/${id}`, { method: 'DELETE' }),
+  getSkipVote: (id: string) => request<{ votes: number; voted_by_me: boolean }>(`/api/queue/${id}/skip-vote`),
   castSkipVote: (id: string) => request<void>(`/api/queue/${id}/skip-vote`, { method: 'POST' }),
   retractSkipVote: (id: string) => request<void>(`/api/queue/${id}/skip-vote`, { method: 'DELETE' }),
   getPlayback: () => request<PlaybackState>('/api/playback'),
@@ -82,6 +87,15 @@ export interface UserProfile {
   username: string;
   avatar_url: string;
   role: string;
+}
+
+export interface ListenDevice {
+  id: string;
+  name: string;
+  created_by_name: string;
+  created_at: string; // UTC 'YYYY-MM-DD HH:MM:SS'
+  last_seen_at: string; // same format, '' if never connected
+  connected: boolean;
 }
 
 export interface QueueTrack {

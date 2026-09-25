@@ -1,11 +1,14 @@
 import { useRef, useCallback, useState, useEffect } from 'react';
-import { wsSend, onWsMessage, offWsMessage } from './useWebSocket';
+import { wsSend, onWsMessage, offWsMessage, onWsOpen, isWsOpen } from './useWebSocket';
 import { useVisualizerStore, EQ_BANDS, sliderToDb } from '../stores/visualizerStore';
 import { useAudioStore } from '../stores/audioStore';
 
 // Consecutive ICE failures before we surface a user-facing error (we keep
 // retrying in the background regardless).
 const MAX_ICE_FAILURES = 3;
+
+// If ICE hasn't connected this long after an offer, start over.
+const CONNECT_WATCHDOG_MS = 15000;
 
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -16,7 +19,9 @@ export function useWebRTC() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const filtersRef = useRef<BiquadFilterNode[]>([]);
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const gainNodeRef = useRef<GainNode | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const volumeRef = useRef(70);
@@ -50,6 +55,7 @@ export function useWebRTC() {
         if (ctx.state === 'suspended') ctx.resume();
 
         const source = ctx.createMediaStreamSource(stream);
+        sourceRef.current = source;
 
         // Mute the <audio> element — we play through Web Audio instead
         audio.volume = 0;
@@ -121,26 +127,41 @@ export function useWebRTC() {
     const ctx = audioCtxRef.current;
     if (ctx && ctx.state !== 'closed') ctx.close();
     audioCtxRef.current = null;
+    sourceRef.current = null;
     analyserRef.current = null;
     filtersRef.current = [];
     gainNodeRef.current = null;
     if (audioRef.current) audioRef.current.volume = volumeRef.current / 100;
   }, []);
 
-  const connect = useCallback(() => {
-    if (connectedRef.current && pcRef.current && pcRef.current.iceConnectionState === 'connected') {
+  // Unhook the previous stream's nodes. Without this every reconnect leaves
+  // another source → EQ → analyser chain wired to the output.
+  const disconnectGraph = useCallback(() => {
+    const nodes: (AudioNode | null)[] = [sourceRef.current, ...filtersRef.current, gainNodeRef.current, analyserRef.current];
+    for (const node of nodes) {
+      try { node?.disconnect(); } catch { /* already disconnected */ }
+    }
+    sourceRef.current = null;
+    analyserRef.current = null;
+    filtersRef.current = [];
+    gainNodeRef.current = null;
+  }, []);
+
+  // force: rebuild even if ICE looks connected. Used when the WebSocket
+  // reopens, because the server drops a client's peer when its socket closes.
+  const connect = useCallback((force = false) => {
+    if (!force && connectedRef.current && pcRef.current && pcRef.current.iceConnectionState === 'connected') {
       return;
     }
+    clearTimeout(watchdogRef.current);
 
     if (pcRef.current) {
       pcRef.current.close();
       pcRef.current = null;
     }
     connectedRef.current = false;
-    // Reset audio graph refs so setupAnalyser rebuilds with the new stream
-    analyserRef.current = null;
-    filtersRef.current = [];
-    gainNodeRef.current = null;
+    // Reset audio graph so setupAnalyser rebuilds with the new stream
+    disconnectGraph();
 
     console.log('[webrtc] creating peer connection...');
     setAudioStatus(iceFailuresRef.current >= MAX_ICE_FAILURES ? 'error' : 'connecting');
@@ -225,7 +246,17 @@ export function useWebRTC() {
     }).catch((err) => {
       console.error('[webrtc] offer error:', err);
     });
-  }, [setAudioStatus, attachGraph]);
+
+    // A lost offer or answer leaves the peer in 'new' forever, and nothing
+    // else fires to retry it. While the socket is down, onWsOpen covers it.
+    watchdogRef.current = setTimeout(() => {
+      if (pcRef.current !== pc || !isWsOpen()) return;
+      if (pc.iceConnectionState !== 'connected' && pc.iceConnectionState !== 'completed') {
+        console.log('[webrtc] no connection after offer, retrying');
+        connect(true);
+      }
+    }, CONNECT_WATCHDOG_MS);
+  }, [setAudioStatus, attachGraph, disconnectGraph]);
 
   // Listen for signaling responses
   useEffect(() => {
@@ -252,11 +283,15 @@ export function useWebRTC() {
     };
   }, []);
 
-  // Connect once on mount — keep the connection alive across track changes
+  // Connect whenever the WebSocket opens, including reconnects: the server
+  // tore down this client's peer when the old socket closed. Otherwise the
+  // connection stays alive across track changes.
   useEffect(() => {
-    const timer = setTimeout(connect, 1000);
+    const unsubscribe = onWsOpen(() => connect(true));
+    if (isWsOpen()) connect();
     return () => {
-      clearTimeout(timer);
+      unsubscribe();
+      clearTimeout(watchdogRef.current);
       if (pcRef.current) {
         pcRef.current.close();
         pcRef.current = null;
@@ -265,6 +300,7 @@ export function useWebRTC() {
         audioCtxRef.current.close();
         audioCtxRef.current = null;
       }
+      sourceRef.current = null;
       analyserRef.current = null;
       filtersRef.current = [];
       gainNodeRef.current = null;

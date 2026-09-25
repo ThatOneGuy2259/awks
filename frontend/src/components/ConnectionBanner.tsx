@@ -1,14 +1,15 @@
 import { useConnectionStore } from '../stores/connectionStore';
 import { useUIStore } from '../stores/uiStore';
 
-export function ConnectionBanner() {
+// noSidebar: full-width, for pages without the sidebar (e.g. /listen).
+export function ConnectionBanner({ noSidebar = false }: { noSidebar?: boolean }) {
   const status = useConnectionStore((s) => s.status);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
 
   if (status === 'connected') return null;
 
   return (
-    <div className={`fixed top-16 left-0 right-0 z-[90] flex items-center justify-center gap-2 py-2 text-xs font-bold transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:left-0' : 'lg:left-64'} ${
+    <div className={`fixed top-16 left-0 right-0 z-[90] flex items-center justify-center gap-2 py-2 text-xs font-bold transition-[left] duration-300 ease-in-out ${sidebarCollapsed || noSidebar ? 'lg:left-0' : 'lg:left-64'} ${
       status === 'connecting'
         ? 'bg-amber-500/10 text-amber-400 border-b border-amber-500/20'
         : 'bg-red-500/10 text-red-400 border-b border-red-500/20'

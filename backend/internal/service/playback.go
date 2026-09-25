@@ -65,9 +65,63 @@ func (s *PlaybackService) GetCurrentState(ctx context.Context) (*model.PlaybackS
 func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.advanceLocked(ctx)
+}
 
+// StartIfIdle starts the next ready track only if nothing is playing. The
+// check and the advance share one lock, so two callers can't both start one.
+func (s *PlaybackService) StartIfIdle(ctx context.Context) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state != nil {
+		return
+	}
+	s.advanceLocked(ctx)
+}
+
+// EndAutoDJ skips the current track if it's an auto-DJ set, so a user's
+// ready request (or an empty room) doesn't wait out an hour-long set.
+func (s *PlaybackService) EndAutoDJ(ctx context.Context, reason string) {
+	s.mu.Lock()
+	state := s.state
+	s.mu.Unlock()
+	if state != nil && state.RequestedBy == "auto-dj" {
+		s.SkipCurrent(ctx, state.QueueID, reason)
+	}
+}
+
+// NowPlayingMessage builds the TRACK_CHANGE for the current state, for
+// clients that connect mid-track without fetching /api/playback.
+func (s *PlaybackService) NowPlayingMessage() model.WSMessage {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.state == nil {
+		return model.WSMessage{Type: "TRACK_CHANGE", Data: model.TrackChangeData{VideoID: ""}}
+	}
+	st := s.state
+	return model.WSMessage{
+		Type: "TRACK_CHANGE",
+		Data: model.TrackChangeData{
+			QueueID:         st.QueueID,
+			VideoID:         st.VideoID,
+			Title:           st.Title,
+			Artist:          st.Artist,
+			StartedAt:       st.StartedAt.Format(time.RFC3339),
+			DurationSec:     st.DurationSec,
+			RequestedBy:     st.RequestedBy,
+			RequesterName:   st.RequesterName,
+			RequesterAvatar: st.RequesterAvatar,
+			Bpm:             st.Bpm,
+		},
+	}
+}
+
+// advanceLocked does the work of AdvanceQueue. Caller holds s.mu.
+func (s *PlaybackService) advanceLocked(ctx context.Context) {
 	// Mark current track as played
 	current, err := s.queries.GetCurrentlyPlaying(ctx)
+	// Whether anything was playing; an already-idle room needs no broadcast.
+	hadTrack := err == nil || s.state != nil
 	if err == nil {
 		s.queries.UpdateQueueStatus(ctx, store.UpdateQueueStatusParams{
 			ID:     current.ID,
@@ -103,8 +157,11 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 			next, err = s.queries.GetNextReadyPending(ctx)
 		}
 		if err != nil {
-			log.Println("No more tracks in queue, entering idle state")
 			s.state = nil
+			if !hadTrack {
+				return
+			}
+			log.Println("No more tracks in queue, entering idle state")
 			s.wsbroadcast(model.WSMessage{
 				Type: "TRACK_CHANGE",
 				Data: model.TrackChangeData{VideoID: ""},
@@ -169,13 +226,16 @@ func (s *PlaybackService) AdvanceQueue(ctx context.Context) {
 	}
 }
 
-func (s *PlaybackService) SkipCurrent(ctx context.Context, reason string) {
+// SkipCurrent skips queueID if it is still the playing track, and reports
+// whether it did. Callers name the track they mean, so a vote or remove that
+// lands just after a track change can't skip the next song.
+func (s *PlaybackService) SkipCurrent(ctx context.Context, queueID, reason string) bool {
 	s.mu.Lock()
 
 	current, err := s.queries.GetCurrentlyPlaying(ctx)
-	if err != nil {
+	if err != nil || current.ID != queueID {
 		s.mu.Unlock()
-		return
+		return false
 	}
 
 	s.queries.UpdateQueueStatus(ctx, store.UpdateQueueStatusParams{
@@ -211,6 +271,7 @@ func (s *PlaybackService) SkipCurrent(ctx context.Context, reason string) {
 
 	// Tell broadcaster to stop current track
 	s.broadcaster.Skip()
+	return true
 }
 
 // GetCurrentAudioPath returns the audio file path for the currently playing track.

@@ -6,7 +6,7 @@ import { VolumeSlider } from '../player/VolumeSlider';
 import { VisualizerStudio } from '../visualizer/VisualizerStudio';
 import { MiniViz } from '../visualizer/MiniViz';
 import { SpectrumCanvas } from '../visualizer/SpectrumCanvas';
-import { api } from '../../lib/api';
+import { toggleSkipVote } from '../../lib/skipVote';
 import { useUIStore } from '../../stores/uiStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { RemoveOwnSongButton } from '../social/RemoveOwnSongButton';
@@ -35,17 +35,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   const progress = duration > 0 ? (elapsed / duration) * 100 : 0;
 
   const handleSkipVote = async () => {
-    try {
-      if (votedByMe) {
-        await api.retractSkipVote(track.queueId);
-        useSkipVoteStore.getState().setVotedByMe(false);
-      } else {
-        await api.castSkipVote(track.queueId);
-        useSkipVoteStore.getState().setVotedByMe(true);
-      }
-    } catch (err) {
-      console.error('vote skip error:', err);
-    }
+    await toggleSkipVote(track.queueId);
   };
 
   const skipButton = (compact: boolean) => (

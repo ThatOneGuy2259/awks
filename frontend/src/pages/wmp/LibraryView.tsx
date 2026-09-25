@@ -4,6 +4,7 @@ import { usePlaybackStore } from '../../stores/playbackStore';
 import { useSkipVoteStore } from '../../stores/skipVoteStore';
 import { useUserStore } from '../../stores/userStore';
 import { api } from '../../lib/api';
+import { toggleSkipVote } from '../../lib/skipVote';
 import { toast } from '../../stores/toastStore';
 import { WmpListRow } from './components/WmpListRow';
 import type { UseWmpSearchReturn } from './hooks/useWmpSearch';
@@ -77,17 +78,7 @@ export function LibraryView({ search }: LibraryViewProps) {
   const handleSkipVote = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!currentTrack) return;
-    try {
-      if (votedByMe) {
-        await api.retractSkipVote(currentTrack.queueId);
-        useSkipVoteStore.getState().setVotedByMe(false);
-      } else {
-        await api.castSkipVote(currentTrack.queueId);
-        useSkipVoteStore.getState().setVotedByMe(true);
-      }
-    } catch (err) {
-      console.error('vote skip error:', err);
-    }
+    await toggleSkipVote(currentTrack.queueId);
   };
 
   const handleRemove = async (e: React.MouseEvent, trackId: string) => {
