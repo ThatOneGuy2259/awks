@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -34,36 +33,11 @@ func NewQueueHandler(q store.Querier, p *service.PlaybackService, h *ws.Hub, api
 }
 
 func (h *QueueHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.queries.GetQueue(r.Context())
+	tracks, err := service.LoadQueue(r.Context(), h.queries)
 	if err != nil {
 		log.Printf("[queue] GetQueue error: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
-	}
-
-	tracks := make([]model.QueueTrack, 0, len(rows))
-	for _, row := range rows {
-		var createdAt time.Time
-		if t, err := time.Parse(time.RFC3339, row.CreatedAt); err == nil {
-			createdAt = t
-		}
-		tracks = append(tracks, model.QueueTrack{
-			ID:              row.ID,
-			YouTubeURL:      row.YoutubeUrl,
-			VideoID:         row.VideoID,
-			Title:           row.Title,
-			Artist:          nullStr(row.Artist),
-			DurationSec:     int(row.DurationSec),
-			ThumbnailURL:    nullStr(row.ThumbnailUrl),
-			RequestedBy:     row.RequestedBy,
-			RequesterName:   row.RequesterName,
-			RequesterAvatar: nullStr(row.RequesterAvatar),
-			Position:        int(row.Position),
-			Status:          row.Status,
-			AudioStatus:     row.AudioStatus,
-			CreatedAt:       createdAt,
-			Bpm:             nullFloat(row.Bpm),
-		})
 	}
 	writeJSON(w, tracks)
 }
@@ -252,7 +226,7 @@ func (h *QueueHandler) RetractSkipVote(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *QueueHandler) broadcastQueueUpdate(ctx context.Context) {
-	h.hub.Broadcast(model.WSMessage{Type: "QUEUE_UPDATE", Data: nil})
+	h.hub.Broadcast(service.QueueUpdateMessage(ctx, h.queries))
 }
 
 func (h *QueueHandler) broadcastSkipVoteUpdate(ctx context.Context, queueID string) {

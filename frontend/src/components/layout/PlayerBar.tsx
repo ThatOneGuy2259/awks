@@ -27,6 +27,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
   const studioOpen = useVisualizerStore((s) => s.studioOpen);
   const setStudioOpen = useVisualizerStore((s) => s.setStudioOpen);
   const miniViz = useVisualizerStore((s) => s.miniViz);
+  const reduceVisuals = useVisualizerStore((s) => s.reduceVisuals);
   const navigate = useNavigate();
 
   if (!track) return null;
@@ -105,7 +106,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
 
       {/* Spectrum visualizer — bottom strip for bars/scope, full-screen backdrop
           for centered modes (radial). Geometry picked by mode inside the host. */}
-      <SpectrumCanvas analyserRef={analyserRef} />
+      {!reduceVisuals && <SpectrumCanvas analyserRef={analyserRef} />}
 
       {/* ── Mobile mini-player: below lg, floats above the bottom nav ── */}
       <div className="lg:hidden fixed left-0 right-0 bottom-[84px] z-40 px-3">
@@ -155,7 +156,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
         <RemoveOwnSongButton compact />
 
         <div className="flex items-center gap-2 flex-shrink-0">
-          {eqButton}
+          {!reduceVisuals && eqButton}
           <VolumeSlider volume={volume} onChange={onVolumeChange} />
         </div>
       </footer>
@@ -170,7 +171,7 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
             <p className="text-sm font-bold text-on-surface truncate">{track.title}</p>
             <p className="text-xs text-on-surface-variant truncate">{track.artist}</p>
           </div>
-          {miniViz && <MiniViz className="h-7 w-20 hidden 2xl:block opacity-70 ml-1" />}
+          {miniViz && !reduceVisuals && <MiniViz className="h-7 w-20 hidden 2xl:block opacity-70 ml-1" />}
         </div>
 
         <div className="flex flex-col items-center gap-2 w-1/3">
@@ -186,13 +187,13 @@ export function PlayerBar({ volume, onVolumeChange, analyserRef }: PlayerBarProp
         </div>
 
         <div className="flex items-center justify-end gap-3 w-1/3 flex-shrink-0">
-          {eqButton}
+          {!reduceVisuals && eqButton}
           <VolumeSlider volume={volume} onChange={onVolumeChange} />
         </div>
       </footer>
 
       {/* Visualizer Studio — right-docked rail, non-occluding so you tune live */}
-      {studioOpen && <VisualizerStudio onClose={() => setStudioOpen(false)} />}
+      {studioOpen && !reduceVisuals && <VisualizerStudio onClose={() => setStudioOpen(false)} />}
     </>
   );
 }

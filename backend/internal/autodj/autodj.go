@@ -349,7 +349,7 @@ func downloadTrack(ctx context.Context, ytdlpPath, videoID, outputPath string) e
 
 	repackCmd := exec.CommandContext(ctx, "ffmpeg", "-y", "-i", tmpPath,
 		"-af", "loudnorm=I=-14:TP=-1:LRA=11",
-		"-c:a", "libopus", "-b:a", "128k",
+		"-c:a", "libopus", "-b:a", "96k",
 		"-page_duration", "20000",
 		outputPath,
 	)

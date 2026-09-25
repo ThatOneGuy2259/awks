@@ -54,6 +54,29 @@ const FALLBACK_EMOTES: [string, string][] = [
   ['Kappa', 'https://static-cdn.jtvnw.net/emoticons/v1/25/3.0'],
 ];
 
+// The emote sets come from ~21 BTTV/FFZ/7TV requests. Cache the merged list
+// for a day so repeat visits skip both the requests and the library chunk.
+const CACHE_KEY = 'awks-emotes';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function loadCachedEmotes(): Emote[] | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { savedAt, emotes } = JSON.parse(raw);
+    if (typeof savedAt !== 'number' || Date.now() - savedAt > CACHE_TTL_MS) return null;
+    return Array.isArray(emotes) && emotes.length > 0 ? emotes : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCachedEmotes(emotes: Emote[]) {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ savedAt: Date.now(), emotes }));
+  } catch {}
+}
+
 export const useEmoteStore = create<EmoteState>((set, get) => ({
   emotes: [],
   parser: null,
@@ -65,6 +88,18 @@ export const useEmoteStore = create<EmoteState>((set, get) => ({
   initialize: async () => {
     const state = get();
     if (state.initialized || state.loading) return;
+
+    // Cache hit: parse with the plain code → link map instead of the library.
+    const cached = loadCachedEmotes();
+    if (cached) {
+      set({
+        emotes: cached,
+        fallbackEmotes: new Map(cached.map((e) => [e.code, e.link])),
+        initialized: true,
+      });
+      return;
+    }
+
     set({ loading: true });
 
     try {
@@ -115,6 +150,7 @@ export const useEmoteStore = create<EmoteState>((set, get) => ({
         template: `<img alt="{name}" title="{name}" class="inline-emote" src="{link}" style="display: inline-block; vertical-align: middle; height: 1.6em; margin: 0 2px;" />`,
       });
 
+      if (allEmotes.length > 0) saveCachedEmotes(allEmotes);
       set({ emotes: allEmotes, parser, fetcher, loading: false, initialized: true });
     } catch (error) {
       console.error('Failed to initialize emotes:', error);

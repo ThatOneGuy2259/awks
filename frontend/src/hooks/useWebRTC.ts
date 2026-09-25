@@ -31,6 +31,102 @@ export function useWebRTC() {
   });
   const [listening, setListening] = useState(false);
 
+  // Set up Web Audio graph: source → EQ filters → gain → analyser + destination
+  // Audio plays through the Web Audio API (not <audio>.srcObject) so EQ affects output
+  const attachGraph = useCallback((stream: MediaStream) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const setupAnalyser = () => {
+      // Reduce visuals may have been switched on while waiting for a gesture.
+      if (analyserRef.current || useVisualizerStore.getState().reduceVisuals) return;
+      try {
+        // Reuse existing AudioContext if available, otherwise create one
+        const ctx = audioCtxRef.current?.state !== 'closed'
+          ? audioCtxRef.current ?? new AudioContext()
+          : new AudioContext();
+        audioCtxRef.current = ctx;
+
+        // Resume if suspended (e.g., autoplay policy)
+        if (ctx.state === 'suspended') ctx.resume();
+
+        const source = ctx.createMediaStreamSource(stream);
+
+        // Mute the <audio> element — we play through Web Audio instead
+        audio.volume = 0;
+
+        // EQ filter chain
+        const savedGains = useVisualizerStore.getState().audioGains;
+        const filters: BiquadFilterNode[] = [];
+        for (let i = 0; i < EQ_BANDS.length; i++) {
+          const band = EQ_BANDS[i];
+          const filter = ctx.createBiquadFilter();
+          filter.type = band.type;
+          filter.frequency.value = band.frequency;
+          filter.gain.value = sliderToDb(savedGains[i]);
+          if (band.type === 'peaking') {
+            filter.Q.value = 1.4;
+          }
+          filters.push(filter);
+        }
+
+        // Volume gain node
+        const gainNode = ctx.createGain();
+        gainNode.gain.value = volumeRef.current / 100;
+        gainNodeRef.current = gainNode;
+
+        // Analyser
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        analyser.smoothingTimeConstant = 0.4;
+        analyser.minDecibels = -80;
+        analyser.maxDecibels = -10;
+
+        // Chain: source → filters → gain → analyser → destination
+        let node: AudioNode = source;
+        for (const filter of filters) {
+          node.connect(filter);
+          node = filter;
+        }
+        node.connect(gainNode);
+        gainNode.connect(analyser);
+        analyser.connect(ctx.destination);
+
+        analyserRef.current = analyser;
+        filtersRef.current = filters;
+        console.log('[webrtc] audio graph created: source → EQ → gain → analyser → output');
+      } catch (e) {
+        console.warn('[webrtc] failed to create audio graph:', e);
+      }
+    };
+
+    // Try immediately, defer to click if AudioContext would be suspended
+    const ctx = audioCtxRef.current ?? new AudioContext();
+    audioCtxRef.current = ctx;
+    if (ctx.state === 'running') {
+      setupAnalyser();
+    } else {
+      const handler = () => {
+        ctx.resume().then(() => setupAnalyser());
+        document.removeEventListener('click', handler);
+        document.removeEventListener('keydown', handler);
+      };
+      document.addEventListener('click', handler);
+      document.addEventListener('keydown', handler);
+    }
+  }, []);
+
+  // Reduce visuals: drop the Web Audio graph and let the <audio> element play
+  // directly. Closing the context releases the EQ filters and analyser with it.
+  const detachGraph = useCallback(() => {
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state !== 'closed') ctx.close();
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    filtersRef.current = [];
+    gainNodeRef.current = null;
+    if (audioRef.current) audioRef.current.volume = volumeRef.current / 100;
+  }, []);
+
   const connect = useCallback(() => {
     if (connectedRef.current && pcRef.current && pcRef.current.iceConnectionState === 'connected') {
       return;
@@ -60,85 +156,7 @@ export function useWebRTC() {
       audio.srcObject = event.streams[0];
       audio.volume = volumeRef.current / 100;
 
-      // Set up Web Audio graph: source → EQ filters → gain → analyser + destination
-      // Audio plays through the Web Audio API (not <audio>.srcObject) so EQ affects output
-      const stream = event.streams[0];
-      const setupAnalyser = () => {
-        if (analyserRef.current) return;
-        try {
-          // Reuse existing AudioContext if available, otherwise create one
-          const ctx = audioCtxRef.current?.state !== 'closed'
-            ? audioCtxRef.current ?? new AudioContext()
-            : new AudioContext();
-          audioCtxRef.current = ctx;
-
-          // Resume if suspended (e.g., autoplay policy)
-          if (ctx.state === 'suspended') ctx.resume();
-
-          const source = ctx.createMediaStreamSource(stream);
-
-          // Mute the <audio> element — we play through Web Audio instead
-          audio.volume = 0;
-
-          // EQ filter chain
-          const savedGains = useVisualizerStore.getState().audioGains;
-          const filters: BiquadFilterNode[] = [];
-          for (let i = 0; i < EQ_BANDS.length; i++) {
-            const band = EQ_BANDS[i];
-            const filter = ctx.createBiquadFilter();
-            filter.type = band.type;
-            filter.frequency.value = band.frequency;
-            filter.gain.value = sliderToDb(savedGains[i]);
-            if (band.type === 'peaking') {
-              filter.Q.value = 1.4;
-            }
-            filters.push(filter);
-          }
-
-          // Volume gain node
-          const gainNode = ctx.createGain();
-          gainNode.gain.value = volumeRef.current / 100;
-          gainNodeRef.current = gainNode;
-
-          // Analyser
-          const analyser = ctx.createAnalyser();
-          analyser.fftSize = 256;
-          analyser.smoothingTimeConstant = 0.4;
-          analyser.minDecibels = -80;
-          analyser.maxDecibels = -10;
-
-          // Chain: source → filters → gain → analyser → destination
-          let node: AudioNode = source;
-          for (const filter of filters) {
-            node.connect(filter);
-            node = filter;
-          }
-          node.connect(gainNode);
-          gainNode.connect(analyser);
-          analyser.connect(ctx.destination);
-
-          analyserRef.current = analyser;
-          filtersRef.current = filters;
-          console.log('[webrtc] audio graph created: source → EQ → gain → analyser → output');
-        } catch (e) {
-          console.warn('[webrtc] failed to create audio graph:', e);
-        }
-      };
-
-      // Try immediately, defer to click if AudioContext would be suspended
-      const ctx = audioCtxRef.current ?? new AudioContext();
-      audioCtxRef.current = ctx;
-      if (ctx.state === 'running') {
-        setupAnalyser();
-      } else {
-        const handler = () => {
-          ctx.resume().then(() => setupAnalyser());
-          document.removeEventListener('click', handler);
-          document.removeEventListener('keydown', handler);
-        };
-        document.addEventListener('click', handler);
-        document.addEventListener('keydown', handler);
-      }
+      if (!useVisualizerStore.getState().reduceVisuals) attachGraph(event.streams[0]);
 
       audio.play().then(() => {
         console.log('[webrtc] audio playing');
@@ -207,7 +225,7 @@ export function useWebRTC() {
     }).catch((err) => {
       console.error('[webrtc] offer error:', err);
     });
-  }, [setAudioStatus]);
+  }, [setAudioStatus, attachGraph]);
 
   // Listen for signaling responses
   useEffect(() => {
@@ -273,13 +291,26 @@ export function useWebRTC() {
           setAudioStatus('playing');
           cleanup();
         }).catch(() => {});
-      } else if (audio && !audio.paused && ctx && ctx.state === 'running') {
+      } else if (audio && !audio.paused && (!ctx || ctx.state === 'running')) {
         cleanup();
       }
     };
     events.forEach((e) => document.addEventListener(e, onGesture, { passive: true }));
     return cleanup;
   }, [setAudioStatus]);
+
+  // Reduce visuals toggled at runtime: swap between direct <audio> playback
+  // and the Web Audio graph without reconnecting the stream.
+  useEffect(() => {
+    return useVisualizerStore.subscribe((state, prev) => {
+      if (state.reduceVisuals === prev.reduceVisuals) return;
+      if (state.reduceVisuals) {
+        detachGraph();
+      } else if (audioRef.current?.srcObject) {
+        attachGraph(audioRef.current.srcObject as MediaStream);
+      }
+    });
+  }, [attachGraph, detachGraph]);
 
   // Subscribe to EQ band gain changes and update audio filters in real-time
   useEffect(() => {

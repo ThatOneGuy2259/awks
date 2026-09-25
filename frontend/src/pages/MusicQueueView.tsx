@@ -1,4 +1,5 @@
 import { usePlaybackStore } from '../stores/playbackStore';
+import { useVisualizerStore } from '../stores/visualizerStore';
 import { QueueList } from '../components/queue/QueueList';
 import { OnlineListeners } from '../components/social/OnlineListeners';
 import { LiveChat } from '../components/social/LiveChat';
@@ -9,6 +10,7 @@ import { formatTime } from '../lib/formatTime';
 
 export function MusicQueueView() {
   const track = usePlaybackStore((s) => s.currentTrack);
+  const reduceVisuals = useVisualizerStore((s) => s.reduceVisuals);
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 max-w-7xl mx-auto px-6 py-8">
@@ -17,7 +19,7 @@ export function MusicQueueView() {
         {/* Now Playing (Editorial Style) */}
         {track && (
           <section className="relative group">
-            <ReactionOverlay />
+            {!reduceVisuals && <ReactionOverlay />}
             <div className="flex flex-col md:flex-row items-center gap-8">
               <div className="relative flex-shrink-0">
                 <div className="w-48 h-48 md:w-64 md:h-64 rounded-xl overflow-hidden shadow-2xl shadow-primary/20 rotate-[-2deg] group-hover:rotate-0 transition-transform duration-500">
@@ -59,7 +61,7 @@ export function MusicQueueView() {
                     </span>
                   </div>
                 )}
-                <ReactionBar />
+                {!reduceVisuals && <ReactionBar />}
               </div>
             </div>
           </section>
