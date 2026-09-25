@@ -111,7 +111,7 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 		// Convert to Opus with loudness normalization and 20ms page duration (required for WebRTC)
 		repackCmd := exec.Command("ffmpeg", "-y", "-i", tmpPath,
 			"-af", "loudnorm=I=-14:TP=-1:LRA=11",
-			"-c:a", "libopus", "-b:a", "128k",
+			"-c:a", "libopus", "-b:a", "96k",
 			"-page_duration", "20000",
 			outputPath,
 		)
