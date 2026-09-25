@@ -9,9 +9,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/mccann/awks3/backend/internal/store"
 )
+
+// extractTimeout caps a whole extraction (download + repack). User requests
+// are at most 10 minutes of audio, so a healthy run is well under this.
+const extractTimeout = 10 * time.Minute
 
 // Extractor handles yt-dlp audio extraction for queued tracks.
 type Extractor struct {
@@ -20,19 +26,33 @@ type Extractor struct {
 	queries        store.Querier
 	onReady        func() // called when a track finishes extracting
 	onStatusChange func() // called whenever audio_status changes (for WS broadcast)
+	onFailed       func(queueID string) // called after a track is marked failed
 	mu             sync.Mutex
 	inProgress     map[string]bool // queue ID -> extracting
 }
 
-func NewExtractor(ytdlpPath, cacheDir string, queries store.Querier, onReady func(), onStatusChange func()) *Extractor {
+func NewExtractor(ytdlpPath, cacheDir string, queries store.Querier, onReady func(), onStatusChange func(), onFailed func(queueID string)) *Extractor {
 	return &Extractor{
 		ytdlpPath:      ytdlpPath,
 		cacheDir:       cacheDir,
 		queries:        queries,
 		onReady:        onReady,
 		onStatusChange: onStatusChange,
+		onFailed:       onFailed,
 		inProgress:     make(map[string]bool),
 	}
+}
+
+// command builds an exec.Cmd that dies with ctx. It runs in its own process
+// group so a timeout also kills children (yt-dlp spawns ffmpeg).
+func command(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	cmd.WaitDelay = 5 * time.Second
+	return cmd
 }
 
 // Extract starts an async extraction for the given queue item.
@@ -53,7 +73,30 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 			e.mu.Unlock()
 		}()
 
+		ctx, cancel := context.WithTimeout(context.Background(), extractTimeout)
+		defer cancel()
+
 		outputPath := filepath.Join(e.cacheDir, queueID+".opus")
+
+		// fail marks the track failed and takes it out of the queue, so it
+		// stops counting toward the requester's limit and can be re-added.
+		fail := func() {
+			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
+				ID:          queueID,
+				AudioStatus: "failed",
+				AudioPath:   sql.NullString{},
+			})
+			e.queries.UpdateQueueStatus(context.Background(), store.UpdateQueueStatusParams{
+				ID:     queueID,
+				Status: "failed",
+			})
+			if e.onStatusChange != nil {
+				e.onStatusChange()
+			}
+			if e.onFailed != nil {
+				e.onFailed(queueID)
+			}
+		}
 
 		// Mark as extracting
 		e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
@@ -70,7 +113,7 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 		// audio-only formats — the ffmpeg repack below re-encodes to opus and
 		// strips video either way.
 		tmpBase := filepath.Join(e.cacheDir, queueID+"-tmp")
-		cmd := exec.Command(e.ytdlpPath,
+		cmd := command(ctx, e.ytdlpPath,
 			"-f", "bestaudio/best",
 			"--no-playlist",
 			"--no-warnings",
@@ -81,14 +124,12 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("[extractor] yt-dlp failed for %s: %v\n%s", queueID, err, string(output))
-			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
-				ID:          queueID,
-				AudioStatus: "failed",
-				AudioPath:   sql.NullString{},
-			})
-			if e.onStatusChange != nil {
-				e.onStatusChange()
+			// Remove any partial download left by a timeout.
+			partials, _ := filepath.Glob(tmpBase + ".*")
+			for _, p := range partials {
+				os.Remove(p)
 			}
+			fail()
 			return
 		}
 
@@ -96,20 +137,13 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 		matches, _ := filepath.Glob(tmpBase + ".*")
 		if len(matches) == 0 {
 			log.Printf("[extractor] no downloaded file found for %s", queueID)
-			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
-				ID:          queueID,
-				AudioStatus: "failed",
-				AudioPath:   sql.NullString{},
-			})
-			if e.onStatusChange != nil {
-				e.onStatusChange()
-			}
+			fail()
 			return
 		}
 		tmpPath := matches[0]
 
 		// Convert to Opus with loudness normalization and 20ms page duration (required for WebRTC)
-		repackCmd := exec.Command("ffmpeg", "-y", "-i", tmpPath,
+		repackCmd := command(ctx, "ffmpeg", "-y", "-i", tmpPath,
 			"-af", "loudnorm=I=-14:TP=-1:LRA=11",
 			"-c:a", "libopus", "-b:a", "96k",
 			"-page_duration", "20000",
@@ -119,14 +153,8 @@ func (e *Extractor) Extract(queueID string, youtubeURL string) {
 		os.Remove(tmpPath)
 		if repackErr != nil {
 			log.Printf("[extractor] ffmpeg conversion failed for %s: %v\n%s", queueID, repackErr, string(repackOut))
-			e.queries.UpdateAudioStatus(context.Background(), store.UpdateAudioStatusParams{
-				ID:          queueID,
-				AudioStatus: "failed",
-				AudioPath:   sql.NullString{},
-			})
-			if e.onStatusChange != nil {
-				e.onStatusChange()
-			}
+			os.Remove(outputPath)
+			fail()
 			return
 		}
 

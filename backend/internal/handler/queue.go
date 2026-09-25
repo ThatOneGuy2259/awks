@@ -132,10 +132,7 @@ func (h *QueueHandler) AddToQueue(w http.ResponseWriter, r *http.Request) {
 
 	h.broadcastQueueUpdate(ctx)
 
-	state, _ := h.playback.GetCurrentState(ctx)
-	if state == nil {
-		go h.playback.AdvanceQueue(context.Background())
-	}
+	go h.playback.StartIfIdle(context.Background())
 
 	// Map to QueueTrack to avoid exposing internal fields like audio_path
 	writeJSON(w, model.QueueTrack{
@@ -179,7 +176,7 @@ func (h *QueueHandler) DeleteFromQueue(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if item.Status == "playing" {
-		h.playback.SkipCurrent(r.Context(), "admin")
+		h.playback.SkipCurrent(r.Context(), id, "admin")
 	} else {
 		h.queries.DeleteQueueItem(r.Context(), id)
 		h.broadcastQueueUpdate(r.Context())
@@ -198,13 +195,21 @@ func (h *QueueHandler) CastSkipVote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only the playing track takes votes. A vote sent just before a track
+	// change would otherwise count toward (and could skip) the next song.
+	state, _ := h.playback.GetCurrentState(ctx)
+	if state == nil || state.QueueID != id {
+		http.Error(w, "that track is no longer playing", http.StatusConflict)
+		return
+	}
+
 	h.queries.CastSkipVote(ctx, store.CastSkipVoteParams{ID: uuid.New().String(), QueueID: id, UserID: userID})
 	h.broadcastSkipVoteUpdate(ctx, id)
 
 	count, _ := h.queries.CountSkipVotes(ctx, id)
 	required := h.getSkipVotesRequired(ctx)
 	if required > 0 && int(count) >= required {
-		h.playback.SkipCurrent(ctx, "vote")
+		h.playback.SkipCurrent(ctx, id, "vote")
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -223,6 +228,25 @@ func (h *QueueHandler) RetractSkipVote(w http.ResponseWriter, r *http.Request) {
 	h.queries.RetractSkipVote(ctx, store.RetractSkipVoteParams{QueueID: id, UserID: userID})
 	h.broadcastSkipVoteUpdate(ctx, id)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetSkipVote returns the vote count for a track and whether the caller has
+// voted, so a refreshed or reconnected client shows the right vote state.
+func (h *QueueHandler) GetSkipVote(w http.ResponseWriter, r *http.Request) {
+	userID := auth.GetUserID(r.Context())
+	ctx := r.Context()
+	id, err := parseUUID(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+
+	count, _ := h.queries.CountSkipVotes(ctx, id)
+	voted, _ := h.queries.HasUserVoted(ctx, store.HasUserVotedParams{QueueID: id, UserID: userID})
+	writeJSON(w, map[string]interface{}{
+		"votes":       count,
+		"voted_by_me": voted == 1,
+	})
 }
 
 func (h *QueueHandler) broadcastQueueUpdate(ctx context.Context) {

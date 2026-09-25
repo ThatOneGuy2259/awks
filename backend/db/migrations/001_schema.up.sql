@@ -67,3 +67,20 @@ INSERT OR IGNORE INTO admin_settings (key, value) VALUES
     ('max_tracks_per_user', '3'),
     ('skip_mode', 'fixed'),
     ('skip_percent', '50');
+
+-- Listen-only screens (/listen). A signed-in user makes a short one-time
+-- code; a screen redeems it for a device key and keeps that until removed.
+CREATE TABLE IF NOT EXISTS listen_codes (
+    code       TEXT PRIMARY KEY,
+    created_by TEXT NOT NULL,
+    expires_at TEXT NOT NULL -- UTC, datetime('now') format
+);
+
+CREATE TABLE IF NOT EXISTS listen_devices (
+    id           TEXT PRIMARY KEY,
+    token_hash   TEXT NOT NULL UNIQUE, -- sha256 of the device key; the key itself is never stored
+    name         TEXT NOT NULL,
+    created_by   TEXT NOT NULL,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    last_seen_at TEXT
+);

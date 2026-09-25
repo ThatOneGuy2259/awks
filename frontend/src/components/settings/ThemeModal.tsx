@@ -5,6 +5,7 @@ import { useCustomThemeStore } from '../../stores/customThemeStore';
 import { useVisualizerStore } from '../../stores/visualizerStore';
 import { ThemeCreator } from './ThemeCreator';
 import { EqControls } from '../visualizer/EqControls';
+import { ScreensSettings } from './ScreensSettings';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import type { CustomThemeInput } from '../../lib/colorUtils';
 
@@ -12,12 +13,13 @@ interface ThemeModalProps {
   onClose: () => void;
 }
 
-type SectionId = 'appearance' | 'audio' | 'performance';
+type SectionId = 'appearance' | 'audio' | 'performance' | 'screens';
 
 const SECTIONS: { id: SectionId; label: string; icon: string }[] = [
   { id: 'appearance', label: 'Appearance', icon: 'palette' },
   { id: 'audio', label: 'Audio', icon: 'graphic_eq' },
   { id: 'performance', label: 'Performance', icon: 'speed' },
+  { id: 'screens', label: 'TV & screens', icon: 'tv' },
 ];
 
 export function ThemeModal({ onClose }: ThemeModalProps) {
@@ -329,6 +331,9 @@ export function ThemeModal({ onClose }: ThemeModalProps) {
                 </div>
               </div>
             )}
+
+            {/* ── TV & screens ────────────────────────────────────────── */}
+            {section === 'screens' && <ScreensSettings />}
           </div>
         </div>
       </div>

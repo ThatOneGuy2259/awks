@@ -7,6 +7,8 @@ import { useListenerStore } from '../stores/listenerStore';
 import { useChatStore } from '../stores/chatStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useConnectionStore } from '../stores/connectionStore';
+import { useUserStore } from '../stores/userStore';
+import { toast } from '../stores/toastStore';
 import { api } from '../lib/api';
 
 const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -17,6 +19,33 @@ let ws: WebSocket | null = null;
 let getTokenFn: (() => Promise<string | null>) | null = null;
 let pendingMessages: string[] = [];
 let reconnectDelay = 2000; // exponential backoff starting point
+// Paired /listen screen: connects to /ws/listen with its device key instead
+// of a sign-in, and the server pushes the current track and queue.
+let listenOnly = false;
+let listenToken: string | null = null;
+let onListenRejected: (() => void) | null = null;
+
+const openCallbacks: Set<() => void> = new Set();
+
+/** Run a callback every time the socket (re)opens. Returns an unsubscribe. */
+export function onWsOpen(callback: () => void): () => void {
+  openCallbacks.add(callback);
+  return () => openCallbacks.delete(callback);
+}
+
+export function isWsOpen(): boolean {
+  return ws?.readyState === WebSocket.OPEN;
+}
+
+/** Load the vote count and my vote for the playing track from the server. */
+function syncSkipVote(queueId: string) {
+  api.getSkipVote(queueId).then((v) => {
+    // Ignore a response that lands after the track changed.
+    if (usePlaybackStore.getState().currentTrack?.queueId !== queueId) return;
+    useSkipVoteStore.getState().setVotes(v.votes);
+    useSkipVoteStore.getState().setVotedByMe(v.voted_by_me);
+  }).catch(() => {});
+}
 
 type MessageCallback = (data: unknown) => void;
 const messageCallbacks: Map<string, Set<MessageCallback>> = new Map();
@@ -42,15 +71,23 @@ export function offWsMessage(type: string, callback?: MessageCallback) {
   }
 }
 
-function connectWs(token: string) {
+function connectWs(token: string | null) {
   // Prevent duplicate connections
   if (ws && ws.readyState <= WebSocket.OPEN) return;
 
   useConnectionStore.getState().setStatus('connecting');
-  const socket = new WebSocket(WS_URL);
+  const socket = new WebSocket(listenOnly ? `${WS_URL}/listen` : WS_URL);
   ws = socket;
 
   socket.onopen = () => {
+    if (listenOnly) {
+      console.log('[WS] connected (listen-only)');
+      socket.send(JSON.stringify({ type: 'LISTEN_AUTH', data: { token: listenToken } }));
+      reconnectDelay = 2000;
+      useConnectionStore.getState().setStatus('connected');
+      openCallbacks.forEach((cb) => cb());
+      return;
+    }
     console.log('[WS] connected, authenticating...');
     // Send auth token as first message instead of in query string
     socket.send(JSON.stringify({ type: 'AUTH', data: { token } }));
@@ -61,6 +98,7 @@ function connectWs(token: string) {
       socket.send(msg);
     }
     pendingMessages = [];
+    openCallbacks.forEach((cb) => cb());
     Promise.all([
       api.getQueue().catch(() => null),
       api.getPlayback().catch(() => null),
@@ -82,6 +120,7 @@ function connectWs(token: string) {
           durationSec: state.duration_sec,
           bpm: state.bpm,
         });
+        syncSkipVote(state.queue_id);
       }
       if (settings) {
         if (settings.skip_votes_required) useSkipVoteStore.getState().setFixedRequired(Number(settings.skip_votes_required));
@@ -99,14 +138,23 @@ function connectWs(token: string) {
     } catch {}
   };
 
-  socket.onclose = () => {
-    console.log(`[WS] disconnected, reconnecting in ${reconnectDelay / 1000}s...`);
+  socket.onclose = (event) => {
     ws = null;
+    // 1008 on /ws/listen: the device key was removed or never valid.
+    // Reconnecting can't help, so hand back to the pairing screen.
+    if (listenOnly && event.code === 1008) {
+      console.log('[WS] listen key rejected');
+      onListenRejected?.();
+      return;
+    }
+    console.log(`[WS] disconnected, reconnecting in ${reconnectDelay / 1000}s...`);
     useConnectionStore.getState().setStatus('disconnected');
     const delay = reconnectDelay;
     reconnectDelay = Math.min(reconnectDelay * 2, 60000); // cap at 60s
     setTimeout(() => {
-      if (getTokenFn) {
+      if (listenOnly) {
+        if (listenToken) connectWs(null);
+      } else if (getTokenFn) {
         getTokenFn().then((freshToken) => {
           if (freshToken) connectWs(freshToken);
         });
@@ -117,12 +165,16 @@ function connectWs(token: string) {
   socket.onerror = () => socket.close();
 }
 
-/** Send a message over the WebSocket. Queues if not yet connected. */
+/**
+ * Send a message over the WebSocket. Queues if not yet connected, except
+ * WebRTC signaling: it belongs to one live peer connection, so a queued offer
+ * would reach the server stale. useWebRTC reconnects on open instead.
+ */
 export function wsSend(type: string, data: unknown) {
   const msg = JSON.stringify({ type, data });
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(msg);
-  } else {
+  } else if (!type.startsWith('WEBRTC_')) {
     pendingMessages.push(msg);
   }
 }
@@ -141,6 +193,23 @@ export function useWebSocket() {
       if (token) connectWs(token);
     });
   }, [userId, getToken]);
+}
+
+/**
+ * The /listen page's connection: authenticates with the screen's device key
+ * and receives playback messages only. onRejected runs if the key is refused.
+ */
+export function useListenWebSocket(token: string, onRejected: () => void) {
+  useEffect(() => {
+    listenOnly = true;
+    listenToken = token;
+    onListenRejected = onRejected;
+    connectWs(null);
+    return () => {
+      listenToken = null;
+      onListenRejected = null;
+    };
+  }, [token, onRejected]);
 }
 
 function handleMessage(msg: { type: string; data: unknown }) {
@@ -177,6 +246,7 @@ function handleMessage(msg: { type: string; data: unknown }) {
         });
       }
       useSkipVoteStore.getState().reset();
+      if (d.video_id && !listenOnly) syncSkipVote(d.queue_id);
       // The server follows every TRACK_CHANGE with a QUEUE_UPDATE carrying the queue.
       break;
     }
@@ -210,6 +280,16 @@ function handleMessage(msg: { type: string; data: unknown }) {
       if (d.max_tracks_per_user) useSettingsStore.getState().setMaxTracksPerUser(d.max_tracks_per_user);
       break;
     }
+    case 'EXTRACTION_FAILED': {
+      const d = data as { title: string; requested_by: string };
+      if (d.requested_by && d.requested_by === useUserStore.getState().id) {
+        toast(`Couldn't load "${d.title}", so it was removed from the queue.`);
+      }
+      break;
+    }
+    case 'CHAT_RATE_LIMITED':
+      toast("You're sending messages too fast. Wait a moment.");
+      break;
     case 'CHAT_MESSAGE': {
       const d = data as { user: { id: string; username: string; avatar_url: string }; text: string; timestamp: string };
       useChatStore.getState().addMessage(d);

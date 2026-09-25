@@ -24,6 +24,12 @@ export function lazyWithRetry<T extends ComponentType<any>>(
         sessionStorage.removeItem(RELOAD_FLAG);
         return mod;
       } catch (err) {
+        // Offline: reloading would land on the browser's offline page and
+        // drop the audio. Wait for the network and try again instead.
+        if (!navigator.onLine) {
+          await new Promise((resolve) => window.addEventListener('online', resolve, { once: true }));
+          return factory();
+        }
         if (!sessionStorage.getItem(RELOAD_FLAG)) {
           sessionStorage.setItem(RELOAD_FLAG, '1');
           window.location.reload();

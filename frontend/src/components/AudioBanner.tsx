@@ -5,7 +5,8 @@ import { useUIStore } from '../stores/uiStore';
 // Surfaces WebRTC audio-stream problems that would otherwise be silent failures.
 // Only shown when the WebSocket control plane is connected — if the socket is
 // down, ConnectionBanner already explains the outage (and the two never overlap).
-export function AudioBanner() {
+// noSidebar: full-width, for pages without the sidebar (e.g. /listen).
+export function AudioBanner({ noSidebar = false }: { noSidebar?: boolean }) {
   const audioStatus = useAudioStore((s) => s.status);
   const wsStatus = useConnectionStore((s) => s.status);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
@@ -31,7 +32,7 @@ export function AudioBanner() {
 
   return (
     <div
-      className={`fixed top-16 left-0 right-0 z-[90] flex items-center justify-center gap-2 py-2 text-xs font-bold border-b transition-[left] duration-300 ease-in-out ${sidebarCollapsed ? 'lg:left-0' : 'lg:left-64'} ${styles[audioStatus]}`}
+      className={`fixed top-16 left-0 right-0 z-[90] flex items-center justify-center gap-2 py-2 text-xs font-bold border-b transition-[left] duration-300 ease-in-out ${sidebarCollapsed || noSidebar ? 'lg:left-0' : 'lg:left-64'} ${styles[audioStatus]}`}
     >
       <span className={`material-symbols-outlined text-sm ${c.spin ? 'animate-spin' : ''}`}>{c.icon}</span>
       <span>{c.label}</span>

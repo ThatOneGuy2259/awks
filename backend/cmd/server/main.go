@@ -100,7 +100,17 @@ func main() {
 	hub := ws.NewHub(nil)
 	go hub.Run()
 
-	// Set onChange after creation to avoid circular reference
+	// Playback Service
+	playbackSvc := service.NewPlaybackService(queries, func(msg model.WSMessage) {
+		hub.Broadcast(msg)
+	}, broadcaster)
+
+	// Set onChange after creation to avoid circular reference. Besides the
+	// listener list, it holds auto-DJ to rooms with someone in them: a join
+	// starts playback if idle, and a room empty for a minute ends any auto-DJ
+	// set. The grace period keeps a lone listener's reload from restarting one.
+	var emptyMu sync.Mutex
+	var emptyTimer *time.Timer
 	hub.SetOnChange(func() {
 		listeners := hub.GetListeners()
 		hub.Broadcast(model.WSMessage{
@@ -110,21 +120,47 @@ func main() {
 				Listeners: listeners,
 			},
 		})
+
+		emptyMu.Lock()
+		defer emptyMu.Unlock()
+		if emptyTimer != nil {
+			emptyTimer.Stop()
+			emptyTimer = nil
+		}
+		if hub.ConnectedCount() > 0 {
+			go playbackSvc.StartIfIdle(context.Background())
+			return
+		}
+		emptyTimer = time.AfterFunc(time.Minute, func() {
+			if hub.ConnectedCount() == 0 {
+				playbackSvc.EndAutoDJ(context.Background(), "empty room")
+			}
+		})
 	})
 
-	// Playback Service
-	playbackSvc := service.NewPlaybackService(queries, func(msg model.WSMessage) {
-		hub.Broadcast(msg)
-	}, broadcaster)
-
-	// Audio Extractor — onReady triggers AdvanceQueue if idle
+	// Audio Extractor — a ready request ends any auto-DJ set and starts
+	// playback if idle, so requests never wait behind an hour-long set.
 	extractor := audio.NewExtractor(cfg.YtdlpPath, cfg.AudioCacheDir, queries, func() {
-		state, _ := playbackSvc.GetCurrentState(context.Background())
-		if state == nil {
-			go playbackSvc.AdvanceQueue(context.Background())
-		}
+		go func() {
+			ctx := context.Background()
+			playbackSvc.EndAutoDJ(ctx, "request")
+			playbackSvc.StartIfIdle(ctx)
+		}()
 	}, func() {
 		hub.Broadcast(service.QueueUpdateMessage(context.Background(), queries))
+	}, func(queueID string) {
+		item, err := queries.GetQueueItem(context.Background(), queueID)
+		if err != nil {
+			return
+		}
+		hub.Broadcast(model.WSMessage{
+			Type: "EXTRACTION_FAILED",
+			Data: map[string]string{
+				"queue_id":     item.ID,
+				"title":        item.Title,
+				"requested_by": item.RequestedBy,
+			},
+		})
 	})
 
 	// Wire up next-track preloading
@@ -148,6 +184,20 @@ func main() {
 			return false
 		}
 		defer autoDJMu.Unlock()
+		// Nobody connected: nothing to stream to.
+		if hub.ConnectedCount() == 0 {
+			return false
+		}
+		// A user's request is still downloading: wait for it rather than
+		// starting an hour-long set in front of it. Extraction times out,
+		// so this can't block forever.
+		var waiting int
+		db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM queue WHERE status = 'pending' AND audio_status != 'failed' AND requested_by != 'auto-dj'`,
+		).Scan(&waiting)
+		if waiting > 0 {
+			return false
+		}
 		// Check admin toggle
 		enabled, _ := queries.GetSetting(ctx, "auto_dj_enabled")
 		if enabled != "true" {
@@ -216,7 +266,11 @@ func main() {
 		autodj.BackfillMetadata(context.Background(), cfg.YtdlpPath, autoDJCacheDir)
 	}()
 
-	// Startup: clean orphan audio files and re-extract pending tracks
+	// Startup: clean orphan audio files and re-extract pending tracks.
+	// Failed extractions used to stay 'pending' in the queue, holding their
+	// requester's slots; move any left over from before that fix out of it.
+	db.ExecContext(context.Background(),
+		`UPDATE queue SET status = 'failed' WHERE status = 'pending' AND audio_status = 'failed'`)
 	extractor.CleanupOrphans(context.Background())
 	extractor.ExtractPending(context.Background())
 
@@ -224,6 +278,23 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	playbackSvc.StartSyncTicker(ctx, hub.ListenerCount)
+
+	// Auto-DJ has a daily time window and an admin toggle, and nothing else
+	// wakes an idle room when either opens. Poll while anyone is connected.
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if hub.ConnectedCount() > 0 {
+					playbackSvc.StartIfIdle(ctx)
+				}
+			}
+		}
+	}()
 
 	// Wire up crossfade hint
 	broadcaster.OnCrossfadeHint = func() {
@@ -299,7 +370,8 @@ func main() {
 	queueH := handler.NewQueueHandler(queries, playbackSvc, hub, cfg.YouTubeAPIKey, cfg.YtdlpPath, extractor)
 	playbackH := handler.NewPlaybackHandler(playbackSvc)
 	adminH := handler.NewAdminHandler(queries, playbackSvc, hub)
-	wsH := handler.NewWSHandler(hub, peerManager, cfg.CORSOrigin)
+	listenH := handler.NewListenHandler(db, hub)
+	wsH := handler.NewWSHandler(hub, peerManager, playbackSvc, queries, listenH, cfg.CORSOrigin)
 	historyH := handler.NewHistoryHandler(queries)
 	searchH := handler.NewSearchHandler(cfg.YouTubeAPIKey, cfg.YtdlpPath, queries)
 	suggestH := handler.NewSuggestHandler()
@@ -329,6 +401,27 @@ func main() {
 
 	// WebSocket (no auth middleware)
 	r.Get("/ws", wsH.HandleWS)
+	// Paired /listen screens (TVs etc.): playback only, device key instead of sign-in
+	r.Get("/ws/listen", wsH.HandleListenWS)
+
+	// Screen pairing is public: the screen isn't signed in. Limit guesses per
+	// client (Cloudflare's CF-Connecting-IP, since cloudflared connects from
+	// localhost) and overall.
+	r.With(
+		httprate.Limit(10, time.Minute, httprate.WithKeyFuncs(func(r *http.Request) (string, error) {
+			if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {
+				return ip, nil
+			}
+			return httprate.KeyByIP(r)
+		})),
+		httprate.LimitAll(60, time.Minute),
+		func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				r.Body = http.MaxBytesReader(w, r.Body, 1<<10)
+				next.ServeHTTP(w, r)
+			})
+		},
+	).Post("/api/listen/pair", listenH.Pair)
 
 	// API routes with auth
 	r.Route("/api", func(r chi.Router) {
@@ -344,6 +437,7 @@ func main() {
 		r.Get("/queue", queueH.GetQueue)
 		r.Post("/queue", queueH.AddToQueue)
 		r.Delete("/queue/{id}", queueH.DeleteFromQueue)
+		r.Get("/queue/{id}/skip-vote", queueH.GetSkipVote)
 		r.Post("/queue/{id}/skip-vote", queueH.CastSkipVote)
 		r.Delete("/queue/{id}/skip-vote", queueH.RetractSkipVote)
 		r.Get("/playback", playbackH.GetPlayback)
@@ -354,6 +448,9 @@ func main() {
 		r.Get("/trending-tags", trendingH.GetTrendingTags)
 		r.Post("/me", meH.SyncMe)
 		r.Get("/settings", adminH.GetSettings)
+		r.Post("/listen/codes", listenH.CreateCode)
+		r.Get("/listen/devices", listenH.ListDevices)
+		r.Delete("/listen/devices/{id}", listenH.RemoveDevice)
 
 		// Admin routes
 		r.Route("/admin", func(r chi.Router) {

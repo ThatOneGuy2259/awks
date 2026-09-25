@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useChatStore } from '../../stores/chatStore';
+import { useConnectionStore } from '../../stores/connectionStore';
 import { lazyWithRetry } from '../../lib/lazyWithRetry';
 import { useEmoteParser } from './useEmoteParser';
 
@@ -14,6 +15,7 @@ interface LiveChatProps {
 
 export function LiveChat({ onSend }: LiveChatProps) {
   const messages = useChatStore((s) => s.messages);
+  const connected = useConnectionStore((s) => s.status === 'connected');
   const [input, setInput] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
   const [showEmotes, setShowEmotes] = useState(false);
@@ -21,8 +23,18 @@ export function LiveChat({ onSend }: LiveChatProps) {
   const emojiRef = useRef<HTMLDivElement>(null);
   const emoteRef = useRef<HTMLDivElement>(null);
   const { parseMessage } = useEmoteParser();
+  // Follow new messages only while the reader is at the bottom (or just
+  // sent one), so scrolling up to read isn't yanked back down.
+  const atBottomRef = useRef(true);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
 
   useEffect(() => {
+    if (!atBottomRef.current) return;
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
@@ -49,7 +61,9 @@ export function LiveChat({ onSend }: LiveChatProps) {
   }, [showEmotes]);
 
   const handleSend = () => {
-    if (!input.trim()) return;
+    // Offline sends would only queue, so keep the text until we reconnect.
+    if (!input.trim() || !connected) return;
+    atBottomRef.current = true;
     onSend(input.trim());
     setInput('');
   };
@@ -60,7 +74,7 @@ export function LiveChat({ onSend }: LiveChatProps) {
         <h3 className="font-bold text-lg font-headline">Live Chat</h3>
       </div>
 
-      <div ref={scrollRef} className="flex-1 p-6 overflow-y-auto space-y-4">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 p-6 overflow-y-auto space-y-4">
         {messages.length === 0 && (
           <p className="text-on-surface-variant text-sm text-center py-8">No messages yet. Say something!</p>
         )}
@@ -107,7 +121,8 @@ export function LiveChat({ onSend }: LiveChatProps) {
         <div className="relative">
           <input
             className="w-full bg-surface-container-low border-none rounded-full py-3 pl-4 pr-32 text-sm focus:ring-1 focus:ring-primary/50 outline-none text-on-surface placeholder:text-on-surface-variant"
-            placeholder="Say something..."
+            placeholder={connected ? 'Say something...' : 'Reconnecting…'}
+            disabled={!connected}
             value={input}
             maxLength={500}
             onChange={(e) => setInput(e.target.value)}
@@ -136,7 +151,9 @@ export function LiveChat({ onSend }: LiveChatProps) {
             </button>
             <button
               onClick={handleSend}
-              className="text-primary p-1 hover:bg-primary/10 rounded-full transition-colors"
+              disabled={!connected}
+              aria-label="Send message"
+              className="text-primary p-1 hover:bg-primary/10 rounded-full transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <span className="material-symbols-outlined text-lg">send</span>
             </button>
